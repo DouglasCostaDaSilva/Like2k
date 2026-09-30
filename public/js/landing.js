@@ -24,10 +24,10 @@ const poses = () => (isNarrow()
       access: { x: 0, y: 1.1, rotY: 0.1, rotX: 0.04, scale: 0.62, camY: 0.2 },
     }
   : {
-      hero: { x: 2.55, y: -0.2, rotY: -0.3, rotX: 0.02, scale: 0.96, camY: 0.2 },
-      steps: { x: -2.5, y: -0.2, rotY: 0.45, rotX: 0.04, scale: 0.96, camY: 0.2 },
-      pricing: { x: 2.6, y: -0.2, rotY: -0.5, rotX: -0.02, scale: 0.96, camY: 0.15 },
-      access: { x: 2.5, y: -0.2, rotY: -0.2, rotX: 0.03, scale: 0.96, camY: 0.2 },
+      hero: { x: 2.55, y: 0.05, rotY: -0.3, rotX: 0.02, scale: 1.0, camY: 0.2 },
+      steps: { x: -2.5, y: 0.05, rotY: 0.45, rotX: 0.04, scale: 1.0, camY: 0.2 },
+      pricing: { x: 2.6, y: 0.05, rotY: -0.5, rotX: -0.02, scale: 1.0, camY: 0.15 },
+      access: { x: 2.5, y: 0.05, rotY: -0.2, rotX: 0.03, scale: 1.0, camY: 0.2 },
     });
 
 const lerp = (a, b, t) => a + (b - a) * t;
