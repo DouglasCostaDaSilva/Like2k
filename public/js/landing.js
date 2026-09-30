@@ -18,16 +18,16 @@ const sections = [...document.querySelectorAll('[data-pose]')];
 const isNarrow = () => innerWidth < 860;
 const poses = () => (isNarrow()
   ? {
-      hero: { x: 0, y: 1.45, rotY: 0, rotX: 0.02, scale: 1.0, camY: 0.2, crop: 1 },
-      steps: { x: 0, y: 1.55, rotY: 0.3, rotX: 0.04, scale: 0.95, camY: 0.2, crop: 1 },
-      pricing: { x: 0, y: 1.55, rotY: -0.3, rotX: 0.02, scale: 0.95, camY: 0.2, crop: 1 },
-      access: { x: 0, y: 1.55, rotY: 0.1, rotX: 0.04, scale: 0.95, camY: 0.2, crop: 1 },
+      hero: { x: 0, y: 1.3, rotY: 0, rotX: 0.02, scale: 0.76, camY: 0.2 },
+      steps: { x: 0, y: 1.1, rotY: 0.4, rotX: 0.04, scale: 0.62, camY: 0.2 },
+      pricing: { x: 0, y: 1.1, rotY: -0.4, rotX: 0.02, scale: 0.62, camY: 0.2 },
+      access: { x: 0, y: 1.1, rotY: 0.1, rotX: 0.04, scale: 0.62, camY: 0.2 },
     }
   : {
-      hero: { x: 0, y: 0.5, rotY: 0, rotX: 0.02, scale: 1.22, camY: 0.2, crop: 0 },
-      steps: { x: -2.3, y: 0.0, rotY: 0.4, rotX: 0.04, scale: 1.25, camY: 0.2, crop: 1 },
-      pricing: { x: 2.35, y: 0.0, rotY: -0.45, rotX: -0.02, scale: 1.25, camY: 0.15, crop: 1 },
-      access: { x: 2.35, y: 0.0, rotY: -0.25, rotX: 0.03, scale: 1.25, camY: 0.2, crop: 1 },
+      hero: { x: 2.55, y: 0.05, rotY: -0.3, rotX: 0.02, scale: 1.0, camY: 0.2 },
+      steps: { x: -2.5, y: 0.05, rotY: 0.45, rotX: 0.04, scale: 1.0, camY: 0.2 },
+      pricing: { x: 2.6, y: 0.05, rotY: -0.5, rotX: -0.02, scale: 1.0, camY: 0.15 },
+      access: { x: 2.5, y: 0.05, rotY: -0.2, rotX: 0.03, scale: 1.0, camY: 0.2 },
     });
 
 const lerp = (a, b, t) => a + (b - a) * t;

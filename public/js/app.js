@@ -43,8 +43,8 @@ function applyPose(view) {
   rotY = target;
   const narrow = innerWidth < 860;
   scene.setPose(narrow
-    ? { x: 0, y: 1.3, rotY, rotX: 0.05, scale: 0.9, camY: 0.2, crop: 1 }
-    : { x: 3.0, y: -0.45, rotY, rotX: 0.04, scale: 1.0, camY: 0.2, crop: 1 });
+    ? { x: 0, y: 1.1, rotY, rotX: 0.05, scale: 0.62, camY: 0.2 }
+    : { x: 3.2, y: -0.1, rotY, rotX: 0.04, scale: 0.95, camY: 0.2 });
 }
 
 function renderMenu() {

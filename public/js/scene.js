@@ -1,13 +1,15 @@
-// LikeSystem — arte principal viva: a ilustração do shinobi em "foto 3D" (malha deslocada por
-// mapa de profundidade) com câmera passeando sozinha, personagem flutuando, fogo em movimento,
-// anéis de fogo 3D girando em volta dele, estilhaços em órbita, faíscas, painéis holográficos
-// com brilho e falhas de sinal, entrada cinematográfica e inclinação por mouse/giroscópio.
+// LikeSystem — cena 3D viva: o shinobi (ilustração recortada) com volume por mapa de profundidade,
+// em pé numa plataforma hexagonal com neon, aura de chakra em chamas atrás dele, anéis de fogo 3D
+// girando em volta, estilhaços em órbita e faíscas. Respira, a câmera passeia sozinha e acompanha
+// mouse, rolagem, troca de telas e giroscópio no celular.
 
 import * as THREE from 'three';
 
-export const HERO_IMAGE = 'img/hero.jpg';
-export const HERO_DEPTH = 'img/hero-depth.png';
-const ASPECT = 1024 / 559;
+export const HERO_CHAR = 'img/hero-char.webp';
+export const HERO_DEPTH = 'img/hero-char-depth.png';
+export const HERO_GLOW = 'img/hero-char-glow.png';
+const CHAR_ASPECT = 444 / 1024; // recorte do personagem
+const GLOW_PAD = { w: 644 / 444, h: 1224 / 1024 }; // aura tem margem em volta da silhueta
 
 function mulberry32(a) {
   return () => {
@@ -25,72 +27,74 @@ const NOISE = /* glsl */`
     vec2 u = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
   }
-  float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++){ v += a * noise(p); p *= 2.03; a *= 0.5; } return v; }
+  float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 5; i++){ v += a * noise(p); p *= 2.03; a *= 0.5; } return v; }
 `;
 
-const heroMaterial = (map, depth) => new THREE.ShaderMaterial({
-  uniforms: {
-    uMap: { value: map }, uDepth: { value: depth }, uTime: { value: 0 }, uFire: { value: 1 },
-    uDepthAmt: { value: 0.95 }, uMouse: { value: new THREE.Vector2() }, uCrop: { value: 0 }, uIntro: { value: 0 },
-  },
+// ---- personagem: volume, respiração, luz de fogo e contorno laranja
+const charMaterial = (map, depth) => new THREE.ShaderMaterial({
+  uniforms: { uMap: { value: map }, uDepth: { value: depth }, uTime: { value: 0 }, uFire: { value: 1 }, uIntro: { value: 0 } },
   vertexShader: /* glsl */`
-    uniform sampler2D uDepth; uniform float uTime; uniform float uDepthAmt; uniform float uCrop;
-    varying vec2 vUv; varying vec2 vArt; varying float vD;
+    uniform sampler2D uDepth; uniform float uTime;
+    varying vec2 vUv; varying float vD;
     void main(){
       vUv = uv;
-      vArt = vec2(mix(uv.x, 0.3 + uv.x * 0.42, uCrop), uv.y); // recorte só do personagem
-      float d = texture2D(uDepth, vArt).r;
+      float d = texture2D(uDepth, uv).r;
       vD = d;
-      float hero = smoothstep(0.5, 0.85, d);
       vec3 p = position;
-      p.z += d * uDepthAmt;
-      p.y += sin(uTime * 1.6) * 0.045 * hero;          // personagem flutua
-      p.z += sin(uTime * 1.6 + 1.2) * 0.05 * hero;     // e respira em profundidade
+      float chest = smoothstep(0.42, 0.62, uv.y) * (1.0 - smoothstep(0.8, 0.9, uv.y));
+      float breath = sin(uTime * 2.1);
+      p.x *= 1.0 + breath * 0.008 * chest;              // peito expande
+      p.y += (breath * 0.012) * smoothstep(0.4, 1.0, uv.y); // ombros e cabeça sobem
+      p.z += d * 0.34;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
     }`,
   fragmentShader: /* glsl */`
-    uniform sampler2D uMap; uniform float uTime; uniform float uFire; uniform vec2 uMouse; uniform float uCrop; uniform float uIntro;
-    varying vec2 vUv; varying vec2 vArt; varying float vD;
+    uniform sampler2D uMap; uniform sampler2D uDepth; uniform float uTime; uniform float uFire; uniform float uIntro;
+    varying vec2 vUv; varying float vD;
     ${NOISE}
     void main(){
-      vec2 uv = vArt + uMouse * (vD - 0.3) * 0.006;
-      vec3 base = texture2D(uMap, uv).rgb;
-
-      // fogo em movimento: pixels laranja/amarelos brilhantes escorrem para cima com ruído
-      float fire = smoothstep(0.2, 0.6, base.r - base.b) * smoothstep(0.55, 0.95, max(base.r, base.g));
-      vec2 flow = vec2(fbm(uv * vec2(38.0, 22.0) + vec2(0.0, -uTime * 2.4)), fbm(uv * vec2(30.0, 18.0) + vec2(5.2, -uTime * 3.1))) - 0.5;
-      vec3 col = texture2D(uMap, uv + flow * 0.009 * fire).rgb;
-      float flick = fbm(uv * 14.0 + vec2(uTime * 0.7, -uTime * 2.0));
-      col *= 1.0 + fire * uFire * (0.1 + 0.45 * flick);
-      col += vec3(1.0, 0.45, 0.05) * fire * pow(flick, 3.0) * 0.35 * uFire;
-
-      // painéis holográficos: faixa de luz varrendo + falha de sinal de vez em quando
-      float panels = (1.0 - smoothstep(0.26, 0.32, vArt.x)) + smoothstep(0.68, 0.74, vArt.x);
-      panels *= step(vD, 0.8) * (1.0 - uCrop);
-      float sweepPos = fract(uTime * 0.16) * 2.2 - 0.6;
-      float band = exp(-pow((vArt.y * 0.8 + vArt.x * 0.35 - sweepPos) * 22.0, 2.0));
-      col += vec3(1.0, 0.55, 0.12) * band * 0.35 * panels;
-      float g = step(0.965, fract(uTime * 0.23)) * panels;
-      if (g > 0.0) {
-        float row = floor(vArt.y * 45.0);
-        float shift = (hash(vec2(row, floor(uTime * 30.0))) - 0.5) * 0.02;
-        col = vec3(texture2D(uMap, uv + vec2(shift + 0.004, 0.0)).r, texture2D(uMap, uv + vec2(shift, 0.0)).g, texture2D(uMap, uv + vec2(shift - 0.004, 0.0)).b);
-      }
-      col += vec3(0.9, 0.5, 0.15) * panels * 0.03 * step(0.5, fract(vArt.y * 180.0 + uTime * 2.0)); // linhas de varredura
-
-      // entrada: revela de baixo para cima com uma linha de fogo
-      float reveal = uIntro * 1.25 - 0.1;
-      float edge = smoothstep(reveal, reveal - 0.08, 1.0 - vArt.y);
-      col += vec3(1.0, 0.5, 0.1) * exp(-pow((1.0 - vArt.y - reveal) * 30.0, 2.0)) * (1.0 - uIntro) * 3.0;
-
-      // bordas somem no fundo (sem cara de cartão): superelipse suave
-      vec2 q = abs(vUv - 0.5) * 2.0;
-      float ex = mix(6.0, 2.6, uCrop);
-      float r = pow(pow(q.x, ex) + pow(q.y, ex), 1.0 / ex);
-      float alpha = smoothstep(1.0, mix(0.8, 0.62, uCrop), r) * edge;
-      gl_FragColor = vec4(col, alpha);
+      vec4 tex = texture2D(uMap, vUv);
+      if (tex.a < 0.03) discard;
+      vec3 col = tex.rgb;
+      // ambientação: sombra fria de cima, luz de fogo quente vindo de baixo e dos lados
+      col *= mix(0.82, 1.0, smoothstep(0.0, 0.6, vUv.y));
+      float flick = 0.75 + 0.25 * fbm(vec2(uTime * 2.3, vUv.y * 3.0));
+      col += vec3(1.0, 0.42, 0.08) * (1.0 - vUv.y) * 0.1 * uFire * flick;
+      float dpx = texture2D(uDepth, vUv).r; // por pixel (contorno liso)
+      float rim = (1.0 - smoothstep(0.12, 0.4, dpx)) * smoothstep(0.3, 0.9, tex.a);
+      col += vec3(1.0, 0.5, 0.12) * rim * 0.75 * uFire * flick;
+      // entrada: materializa de baixo para cima com uma linha de chakra
+      float reveal = uIntro * 1.2 - 0.1;
+      if (vUv.y > reveal + 0.02) discard;
+      col += vec3(1.0, 0.6, 0.15) * exp(-pow((vUv.y - reveal) * 40.0, 2.0)) * (1.0 - uIntro) * 4.0;
+      gl_FragColor = vec4(col, tex.a);
     }`,
   transparent: true,
+});
+
+// ---- aura de chakra: chamas subindo a partir da silhueta
+const auraMaterial = (glow) => new THREE.ShaderMaterial({
+  uniforms: { uGlow: { value: glow }, uTime: { value: 0 }, uFire: { value: 1 } },
+  vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform sampler2D uGlow; uniform float uTime; uniform float uFire;
+    varying vec2 vUv;
+    ${NOISE}
+    void main(){
+      float n = fbm(vUv * vec2(7.0, 4.0) + vec2(0.0, -uTime * 1.6));
+      float n2 = fbm(vUv * vec2(14.0, 6.0) + vec2(3.1, -uTime * 2.6));
+      // amostra a silhueta mais abaixo => as chamas sobem e se desfazem em línguas
+      vec2 warp = vec2((n - 0.5) * 0.08, -0.05 - n2 * 0.1);
+      float g = texture2D(uGlow, vUv + warp).r;
+      float tongues = smoothstep(0.45, 0.85, n2 + n * 0.35);
+      float flames = smoothstep(0.18, 0.7, g) * (0.35 + 0.95 * tongues);
+      float inner = smoothstep(0.55, 0.95, texture2D(uGlow, vUv).r);
+      vec3 col = mix(vec3(0.9, 0.18, 0.0), vec3(1.0, 0.62, 0.12), smoothstep(0.3, 1.0, flames));
+      col = mix(col, vec3(1.0, 0.85, 0.45), smoothstep(0.85, 1.3, flames));
+      float a = clamp(flames * 0.8 - inner * 0.25, 0.0, 1.0) * uFire * (0.85 + 0.15 * sin(uTime * 3.0));
+      gl_FragColor = vec4(col * a * 1.3, a);
+    }`,
+  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
 });
 
 const ringMaterial = (color, strength) => new THREE.ShaderMaterial({
@@ -105,7 +109,7 @@ const ringMaterial = (color, strength) => new THREE.ShaderMaterial({
       float gap = smoothstep(0.2, 0.5, noise(vec2(vUv.x * 7.0 - uTime * 1.2, 7.0)));
       float core = 1.0 - abs(vUv.y - 0.5) * 2.0;
       float v = pow(core, 1.6) * (0.3 + flame) * gap;
-      gl_FragColor = vec4(mix(uColor, vec3(1.0, 0.93, 0.7), v * v) * v * uStrength * 3.2, v);
+      gl_FragColor = vec4(mix(uColor, vec3(1.0, 0.93, 0.7), v * v) * v * uStrength * 3.0, v);
     }`,
   transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
 });
@@ -120,9 +124,9 @@ function particleMaterial(pixelRatio) {
         vec3 p = position;
         float h = mod(p.y + uTime * (0.25 + aSeed * 0.6) * uBoost, 6.0) - 3.0;
         p.y = h;
-        p.x += sin(uTime * 0.8 + aSeed * 30.0) * 0.35;
+        p.x += sin(uTime * 0.8 + aSeed * 30.0) * 0.3;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        gl_PointSize = (9.0 + aSeed * 26.0) * uPR / -mv.z;
+        gl_PointSize = (9.0 + aSeed * 24.0) * uPR / -mv.z;
         vColor = aColor;
         vA = smoothstep(-3.0, -2.3, h) * (1.0 - smoothstep(1.6, 3.0, h)) * (0.45 + aSeed * 0.55) * (0.6 + 0.4 * sin(uTime * 8.0 + aSeed * 50.0));
         gl_Position = projectionMatrix * mv;
@@ -134,7 +138,17 @@ function particleMaterial(pixelRatio) {
   });
 }
 
-export function createScene(canvas, { mode = 'landing', onReady, image = HERO_IMAGE, depth = HERO_DEPTH } = {}) {
+function radialTexture(stops) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  for (const [o, col] of stops) grd.addColorStop(o, col);
+  g.fillStyle = grd; g.fillRect(0, 0, 256, 256);
+  return new THREE.CanvasTexture(c);
+}
+
+export function createScene(canvas, { mode = 'landing', onReady, image = HERO_CHAR, depth = HERO_DEPTH, glow = HERO_GLOW } = {}) {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   const pr = Math.min(window.devicePixelRatio || 1, mode === 'app' ? 1.5 : 2);
@@ -142,68 +156,134 @@ export function createScene(canvas, { mode = 'landing', onReady, image = HERO_IM
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x07070a);
+  scene.fog = new THREE.FogExp2(0x07070a, 0.05);
   const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
   camera.position.set(0, 0.2, 9.5);
   let baseZ = 9.5;
 
+  scene.add(new THREE.HemisphereLight(0xffd2a8, 0x1a0c05, 0.8));
+  const key = new THREE.DirectionalLight(0xffe6cc, 1.4);
+  key.position.set(2, 5, 5); scene.add(key);
+  const fireLight = new THREE.PointLight(0xff6a00, 12, 8, 2);
+  fireLight.position.set(0, -1.2, 1.5); scene.add(fireLight);
+
   const rig = new THREE.Group();
   scene.add(rig);
+  const FLOOR = -2.05;
 
-  // ---- Arte principal com profundidade
-  const loaded = { map: false, depth: false };
+  // ---- texturas
+  const loaded = { a: false, b: false, c: false };
   let ready = false, introStart = 0;
-  const check = () => {
-    if (loaded.map && loaded.depth && !ready) { ready = true; introStart = performance.now(); onReady?.(); }
-  };
+  const check = () => { if (loaded.a && loaded.b && loaded.c && !ready) { ready = true; introStart = performance.now(); onReady?.(); } };
   const loader = new THREE.TextureLoader();
-  const map = loader.load(image, () => { loaded.map = true; check(); });
-  const depthTex = loader.load(depth, () => { loaded.depth = true; check(); });
-  for (const t of [map, depthTex]) { t.colorSpace = THREE.NoColorSpace; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; }
-  map.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  setTimeout(() => { loaded.map = loaded.depth = true; check(); }, 6000);
+  const mapTex = loader.load(image, () => { loaded.a = true; check(); });
+  const depthTex = loader.load(depth, () => { loaded.b = true; check(); });
+  const glowTex = loader.load(glow, () => { loaded.c = true; check(); });
+  for (const t of [mapTex, depthTex, glowTex]) { t.colorSpace = THREE.NoColorSpace; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; }
+  mapTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  setTimeout(() => { loaded.a = loaded.b = loaded.c = true; check(); }, 6000);
 
-  const W = 6.4, H = W / ASPECT;
-  const heroMat = heroMaterial(map, depthTex);
-  const art = new THREE.Mesh(new THREE.PlaneGeometry(W, H, 256, 140), heroMat);
-  rig.add(art);
+  // ---- personagem + aura
+  const CH = 4.25, CW = CH * CHAR_ASPECT;
+  const hero = new THREE.Group();
+  hero.position.y = FLOOR + CH / 2 - 0.02;
+  rig.add(hero);
+  const charMat = charMaterial(mapTex, depthTex);
+  const character = new THREE.Mesh(new THREE.PlaneGeometry(CW, CH, 120, 260), charMat);
+  character.renderOrder = 1;
+  const auraMat = auraMaterial(glowTex);
+  const aura = new THREE.Mesh(new THREE.PlaneGeometry(CW * GLOW_PAD.w * 1.15, CH * GLOW_PAD.h * 1.08), auraMat);
+  aura.position.set(0, CH * 0.03, -0.12);
+  hero.add(aura, character);
 
-  // ---- Efeitos 3D em volta do personagem
+  // ---- plataforma hexagonal com neon
+  const stage = new THREE.Group();
+  stage.position.y = FLOOR;
+  const metalDark = new THREE.MeshStandardMaterial({ color: 0x16171c, metalness: 0.75, roughness: 0.35, flatShading: true });
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.8, 0.2, 6), metalDark);
+  top.position.y = -0.1;
+  const inset = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.02, 6), new THREE.MeshStandardMaterial({ color: 0x0c0c10, metalness: 0.6, roughness: 0.5 }));
+  inset.position.y = 0.005;
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.4, 0.28, 6), metalDark);
+  base.position.y = -0.34;
+  stage.add(top, inset, base);
+  const neon = new THREE.MeshBasicMaterial({ color: 0xff7a1a });
+  const hexEdges = (radius, y, thick, height) => {
+    for (let i = 0; i < 6; i++) {
+      const a0 = (i / 6) * Math.PI * 2, a1 = ((i + 1) / 6) * Math.PI * 2;
+      const p0 = new THREE.Vector3(Math.sin(a0) * radius, y, Math.cos(a0) * radius);
+      const p1 = new THREE.Vector3(Math.sin(a1) * radius, y, Math.cos(a1) * radius);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(p0.distanceTo(p1) * 0.86, height, thick), neon);
+      bar.position.copy(p0).add(p1).multiplyScalar(0.5);
+      bar.rotation.y = Math.atan2(p1.x - p0.x, p1.z - p0.z) - Math.PI / 2;
+      stage.add(bar);
+    }
+  };
+  hexEdges(1.74, 0.005, 0.04, 0.02);
+  hexEdges(1.3, 0.02, 0.025, 0.012);
+  hexEdges(2.37, -0.34, 0.05, 0.06);
+  stage.rotation.y = Math.PI / 6;
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.9), new THREE.MeshBasicMaterial({
+    map: radialTexture([[0, 'rgba(0,0,0,0.85)'], [0.6, 'rgba(0,0,0,0.35)'], [1, 'rgba(0,0,0,0)']]), transparent: true, depthWrite: false,
+  }));
+  shadow.rotation.x = -Math.PI / 2; shadow.position.y = FLOOR + 0.03;
+  const pool = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 4.6), new THREE.MeshBasicMaterial({
+    map: radialTexture([[0, 'rgba(255,110,20,0.55)'], [0.45, 'rgba(255,80,0,0.15)'], [1, 'rgba(0,0,0,0)']]), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  pool.rotation.x = -Math.PI / 2; pool.position.y = FLOOR + 0.025;
+  rig.add(stage, pool, shadow);
+
+  const grid = new THREE.GridHelper(26, 52, 0xff7700, 0x26262c);
+  grid.material.transparent = true; grid.material.opacity = 0.18; grid.material.depthWrite = false;
+  grid.position.y = FLOOR - 0.5;
+  scene.add(grid);
+
+  // feixe de luz atrás do personagem
+  const beam = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 7), new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 } },
+    vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */`uniform float uTime; varying vec2 vUv;
+      void main(){ float x = 1.0 - abs(vUv.x - 0.5) * 2.0; float a = pow(x, 3.0) * smoothstep(0.0, 0.35, vUv.y) * (1.0 - smoothstep(0.6, 1.0, vUv.y)) * (0.16 + 0.04 * sin(uTime * 1.7));
+      gl_FragColor = vec4(vec3(1.0, 0.45, 0.1) * a, a); }`,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  beam.position.set(0, FLOOR + 3.2, -0.9);
+  rig.add(beam);
+
+  // ---- anéis de fogo e estilhaços em volta do personagem
   const fx = new THREE.Group();
-  fx.position.set(0.05, 0.12, 0);
+  fx.position.y = FLOOR + 2.0;
   rig.add(fx);
   const ringMatA = ringMaterial(0xff6a00, 1);
   const ringMatB = ringMaterial(0xffb030, 0.8);
-  const ringA = new THREE.Mesh(new THREE.TorusGeometry(1.22, 0.07, 10, 260), ringMatA);
-  ringA.position.z = 0.75; ringA.rotation.set(1.2, 0.25, 0);
-  const ringB = new THREE.Mesh(new THREE.TorusGeometry(1.42, 0.045, 10, 260), ringMatB);
-  ringB.position.z = 0.7; ringB.rotation.set(1.85, -0.4, 0.3);
+  const ringA = new THREE.Mesh(new THREE.TorusGeometry(1.35, 0.06, 10, 260), ringMatA);
+  ringA.rotation.set(1.25, 0.25, 0);
+  const ringB = new THREE.Mesh(new THREE.TorusGeometry(1.55, 0.04, 10, 260), ringMatB);
+  ringB.rotation.set(1.8, -0.35, 0.3);
+  ringB.position.y = -0.4;
   ringA.renderOrder = ringB.renderOrder = 2;
   fx.add(ringA, ringB);
-
-    const shardMats = [
-    new THREE.MeshBasicMaterial({ color: 0xff7a1a }),
-    new THREE.MeshBasicMaterial({ color: 0xffc04a }),
-    new THREE.MeshBasicMaterial({ color: 0xff4d00 }),
-  ];
+  const shardMats = [0xff7a1a, 0xffc04a, 0xff4d00].map((color) => new THREE.MeshBasicMaterial({ color }));
   const shardGeo = new THREE.TetrahedronGeometry(0.05, 0);
   const shards = [];
   const srnd = mulberry32(21);
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 36; i++) {
     const m = new THREE.Mesh(shardGeo, shardMats[Math.floor(srnd() * 3)]);
-    m.userData = { r: 1.0 + srnd() * 1.1, a: srnd() * Math.PI * 2, y: (srnd() - 0.5) * 2.4, sp: (0.15 + srnd() * 0.35) * (srnd() < 0.5 ? 1 : -1), rs: 0.6 + srnd() * 2.4, z: 0.8 };
-    m.scale.setScalar(0.6 + srnd() * 1.6);
+    m.userData = { r: 1.1 + srnd() * 1.0, a: srnd() * Math.PI * 2, y: (srnd() - 0.5) * 3.2, sp: (0.15 + srnd() * 0.35) * (srnd() < 0.5 ? 1 : -1), rs: 0.6 + srnd() * 2.4 };
+    m.scale.setScalar(0.6 + srnd() * 1.5);
     fx.add(m);
     shards.push(m);
   }
 
-  // ---- Faíscas
+  // ---- faíscas
   const COUNT = mode === 'app' ? 380 : 800;
   const pGeo = new THREE.BufferGeometry();
   const pPos = new Float32Array(COUNT * 3), pSeed = new Float32Array(COUNT), pCol = new Float32Array(COUNT * 3);
   const rnd = mulberry32(42);
   const cols = [new THREE.Color(0xff7a1a), new THREE.Color(0xffb640), new THREE.Color(0xff4a00)];
   for (let i = 0; i < COUNT; i++) {
-    pPos.set([(rnd() - 0.5) * 7.5, rnd() * 6, 0.4 + rnd() * 2.8], i * 3);
+    const r = 0.8 + rnd() * 3.8, a = rnd() * Math.PI * 2;
+    pPos.set([Math.cos(a) * r, rnd() * 6, Math.sin(a) * r * 0.7 + 0.6], i * 3);
     pSeed[i] = rnd();
     const c = cols[Math.floor(rnd() * cols.length)];
     pCol.set([c.r, c.g, c.b], i * 3);
@@ -217,13 +297,12 @@ export function createScene(canvas, { mode = 'landing', onReady, image = HERO_IM
   rig.add(particles);
 
   // ------------------------------------------------------------------ interação
-  const pose = { x: 0, y: 0, z: 0, rotY: 0, rotX: 0, scale: 1, camY: 0.2, crop: 0 };
+  const pose = { x: 0, y: 0, z: 0, rotY: 0, rotX: 0, scale: 1, camY: 0.2 };
   const target = { ...pose };
   const mouse = new THREE.Vector2(), mouseS = new THREE.Vector2();
   let fire = 1, fireTarget = 1, boost = 3, wiggle = 0;
 
   addEventListener('pointermove', (e) => mouse.set((e.clientX / innerWidth) * 2 - 1, (e.clientY / innerHeight) * 2 - 1), { passive: true });
-  // celular: inclina com o giroscópio (quando o navegador permite)
   addEventListener('deviceorientation', (e) => {
     if (e.gamma == null) return;
     mouse.set(Math.max(-1, Math.min(1, e.gamma / 25)), Math.max(-1, Math.min(1, (e.beta - 45) / 25)));
@@ -254,37 +333,36 @@ export function createScene(canvas, { mode = 'landing', onReady, image = HERO_IM
     fire += (fireTarget - fire) * (1 - Math.pow(0.05, dt));
     boost += (1 - boost) * (1 - Math.pow(0.15, dt));
     wiggle *= Math.pow(0.08, dt);
-    const intro = ready ? (reduced ? 1 : ease((now - introStart) / 1800)) : 0;
+    const intro = ready ? (reduced ? 1 : ease((now - introStart) / 1700)) : 0;
 
-    // câmera passeando sozinha + mouse/giroscópio
-    const idleY = Math.sin(t * 0.35) * 0.16 + Math.sin(t * 0.13) * 0.06;
-    const idleX = Math.sin(t * 0.27) * 0.05;
-    const tiltY = Math.sin(pose.rotY) * 0.2 + idleY + mouseS.x * 0.3 + Math.sin(t * 9) * wiggle * 0.08;
+    // câmera passeando sozinha + pose da seção + mouse/giroscópio
+    const idleY = Math.sin(t * 0.35) * 0.22 + Math.sin(t * 0.13) * 0.08;
+    const tiltY = Math.sin(pose.rotY) * 0.3 + idleY + mouseS.x * 0.35 + Math.sin(t * 9) * wiggle * 0.1;
     rig.position.set(pose.x, pose.y, pose.z);
-    rig.rotation.set(pose.rotX * 0.6 + idleX + mouseS.y * 0.12, tiltY, 0);
-    rig.scale.setScalar(pose.scale * (0.9 + 0.1 * intro));
-    camera.position.set(mouseS.x * 0.3 + Math.sin(t * 0.21) * 0.25, pose.camY - mouseS.y * 0.15, baseZ + Math.sin(t * 0.18) * 0.35 + (1 - intro) * 1.5);
-    camera.lookAt(pose.x * 0.35, pose.y * 0.5, 0);
+    rig.rotation.set(pose.rotX * 0.5 + Math.sin(t * 0.27) * 0.04 + mouseS.y * 0.1, tiltY, 0);
+    rig.scale.setScalar(pose.scale * (0.92 + 0.08 * intro));
+    hero.rotation.y = -tiltY * 0.35; // personagem acompanha a câmera (não fica de lado demais)
+    hero.rotation.z = Math.sin(t * 0.9) * 0.006;
+    camera.position.set(mouseS.x * 0.3 + Math.sin(t * 0.21) * 0.25, pose.camY - mouseS.y * 0.15, baseZ + Math.sin(t * 0.18) * 0.3 + (1 - intro) * 1.4);
+    camera.lookAt(pose.x * 0.35, pose.y * 0.5 + 0.05, 0);
 
-    art.scale.x = 1 - pose.crop * 0.58;
-    heroMat.uniforms.uCrop.value = pose.crop;
-    heroMat.uniforms.uTime.value = t;
-    heroMat.uniforms.uFire.value = fire + (1 - intro) * 1.5;
-    heroMat.uniforms.uMouse.value.copy(mouseS);
-    heroMat.uniforms.uIntro.value = intro;
+    const f = fire * (0.4 + 0.6 * intro);
+    charMat.uniforms.uTime.value = t; charMat.uniforms.uFire.value = f; charMat.uniforms.uIntro.value = intro;
+    auraMat.uniforms.uTime.value = t; auraMat.uniforms.uFire.value = f * intro;
+    beam.material.uniforms.uTime.value = t;
+    fireLight.intensity = 8 + f * 6 + Math.sin(t * 9) * 1.5;
+    neon.color.setHSL(0.07, 1, 0.5 + Math.sin(t * 2) * 0.06);
 
-    fx.scale.setScalar(1 - pose.crop * 0.08);
     ringA.rotation.z = t * 0.6; ringB.rotation.z = -t * 0.45;
-    ringA.rotation.x = 1.2 + Math.sin(t * 0.5) * 0.08;
-    const rs = fire * intro;
+    ringA.rotation.x = 1.25 + Math.sin(t * 0.5) * 0.08;
     ringMatA.uniforms.uTime.value = t; ringMatB.uniforms.uTime.value = t;
-    ringMatA.uniforms.uStrength.value = rs; ringMatB.uniforms.uStrength.value = rs * 0.8;
+    ringMatA.uniforms.uStrength.value = f * intro; ringMatB.uniforms.uStrength.value = f * intro * 0.8;
     for (const m of shards) {
       const u = m.userData;
       const a = u.a + t * u.sp;
-      m.position.set(Math.cos(a) * u.r, u.y + Math.sin(t * 0.8 + u.a) * 0.12, u.z + Math.sin(a) * u.r * 0.6);
+      m.position.set(Math.cos(a) * u.r, u.y + Math.sin(t * 0.8 + u.a) * 0.12, Math.sin(a) * u.r * 0.7);
       m.rotation.set(t * u.rs, t * u.rs * 0.7, 0);
-      m.visible = intro > 0.3;
+      m.visible = intro > 0.4;
     }
     pMat.uniforms.uTime.value = t;
     pMat.uniforms.uBoost.value = boost;
