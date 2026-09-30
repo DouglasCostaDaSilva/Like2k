@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
@@ -28,9 +29,12 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '32kb' }));
+app.use('/api/v1', express.urlencoded({ extended: false, limit: '32kb' })); // API pública aceita formulário também
 
-// Rotas que alteram dados só aceitam JSON (junto com SameSite=Strict, bloqueia CSRF por formulário).
+// Rotas do painel que alteram dados só aceitam JSON (junto com SameSite=Strict, bloqueia CSRF por formulário).
+// A API pública (/api/v1) usa X-Api-Key, sem cookie, então não tem esse risco.
 app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/v1/')) return next();
   if (req.method !== 'GET' && !req.is('application/json')) return res.status(415).json({ error: 'Envie os dados em JSON.' });
   next();
 });
@@ -41,10 +45,18 @@ const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,24}$/;
 const UID_RE = /^\d{5,15}$/;
 const toInt = (v) => (typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN);
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const usedTotal = (userId) => db().sends.filter((s) => s.userId === userId && s.status === 'success').reduce((a, s) => a + s.likesSent, 0);
+const isExpired = (u) => Boolean(u.expiresAt) && u.expiresAt < dayKey();
+
 const publicUser = (u) => ({
   id: u.id, username: u.username, role: u.role, status: u.status, stock: u.stock,
+  usedTotal: usedTotal(u.id), expiresAt: u.expiresAt || null, expired: isExpired(u),
   contact: u.contact || '', note: u.note || '', createdAt: u.createdAt, lastLoginAt: u.lastLoginAt || null,
 });
+
+const SOURCES = { manual: 'manual_user', auto: 'auto_schedule', api: 'api_send' };
+const activeScheduleFor = (targetId) => db().schedules.find((x) => x.status === 'active' && x.targetId === targetId);
 
 function uidUsage(targetId, day = dayKey()) {
   let used = 0;
@@ -143,9 +155,11 @@ app.get('/api/me', requireAuth, wrap(async (req, res) => {
     user: publicUser(req.user),
     rules: rules(),
     global: await globalStock(),
+    apiKey: req.user.role === 'client' ? req.user.apiKey || null : null,
     stats: {
       sentToday: mine.filter((s) => s.day === today && s.status === 'success').reduce((a, s) => a + s.likesSent, 0),
       sentTotal: mine.filter((s) => s.status === 'success').reduce((a, s) => a + s.likesSent, 0),
+      activeSchedules: db().schedules.filter((x) => x.userId === req.user.id && x.status === 'active').length,
       sendsCount: mine.length,
       pendingOrders: db().orders.filter((o) => o.userId === req.user.id && o.status === 'pending').length,
     },
@@ -178,36 +192,41 @@ app.get('/api/player/:uid', requireAuth, wrap(async (req, res) => {
 }));
 
 // ---------- Envio de likes ----------
-app.post('/api/send', requireAuth, wrap(async (req, res) => {
-  const user = req.user;
-  const targetId = String(req.body?.target_id ?? '').trim();
-  const amount = toInt(req.body?.amount);
+// Um único caminho para envio manual, Auto Likes e API pública.
+// Retorna { status, body } prontos para responder.
+async function performSend(user, targetIdRaw, amountRaw, source = 'manual', scheduleId = null) {
+  const targetId = String(targetIdRaw ?? '').trim();
+  let amount = toInt(amountRaw);
+  const fail = (status, error, extra = {}) => ({ status, body: { error, ...extra } });
 
-  if (!UID_RE.test(targetId)) return res.status(400).json({ error: 'Informe um ID válido (somente números).' });
+  if (!UID_RE.test(targetId)) return fail(400, 'Informe um ID válido (somente números).');
   if (!Number.isInteger(amount) || amount < 1 || amount > config.maxPerSend) {
-    return res.status(400).json({ error: `A quantidade deve ser entre 1 e ${config.maxPerSend.toLocaleString('pt-BR')} likes.` });
+    return fail(400, `A quantidade deve ser entre 1 e ${config.maxPerSend.toLocaleString('pt-BR')} likes.`);
+  }
+  if (user.status !== 'active') return fail(403, 'Conta desativada pelo administrador.');
+  if (isExpired(user)) return fail(403, 'Seu acesso expirou. Renove seu plano com o administrador.');
+  if (source !== 'auto' && activeScheduleFor(targetId)) {
+    return fail(400, 'Este ID está com Auto Likes ativo. Envios manuais ficam bloqueados enquanto o agendamento estiver em execução.');
   }
   const global = await getBalance();
-  if (global.value && global.value.remaining < amount) return res.status(400).json({ error: 'Estoque global insuficiente no momento. Avise o administrador.' });
+  if (global.value && global.value.remaining < amount) return fail(400, 'Estoque global insuficiente no momento. Avise o administrador.');
 
   // A partir daqui não há await até a reserva: checagem e débito são atômicos.
   const isClient = user.role === 'client';
-  if (isClient && user.stock < amount) {
-    return res.status(400).json({ error: `Estoque individual insuficiente. Você tem ${user.stock.toLocaleString('pt-BR')} likes.` });
-  }
   const used = uidUsage(targetId);
   const left = config.dailyLimitPerUid - used;
+  if (source === 'auto' && left > 0 && amount > left) amount = left; // agendamento envia o que ainda cabe hoje
   if (amount > left) {
-    return res.status(400).json({
-      error: left > 0
-        ? `Este ID já recebeu ${used.toLocaleString('pt-BR')} likes hoje. Restam ${left.toLocaleString('pt-BR')} para hoje.`
-        : 'Este ID já atingiu o limite de 2.000 likes hoje. Tente novamente amanhã.',
-    });
+    return fail(400, left > 0
+      ? `Este ID já recebeu ${used.toLocaleString('pt-BR')} likes hoje. Restam ${left.toLocaleString('pt-BR')} para hoje.`
+      : 'Este ID já atingiu o limite de 2.000 likes hoje. Tente novamente amanhã.');
   }
-  // Reserva síncrona (sem await entre checagem e débito) evita gasto duplo em envios simultâneos.
+  if (isClient && user.stock < amount) {
+    return fail(400, `Estoque insuficiente. Você tem ${user.stock.toLocaleString('pt-BR')} likes.`);
+  }
   const send = {
     id: nextId('send'), userId: user.id, username: user.username, targetId, amount, likesSent: 0,
-    status: 'pending', day: dayKey(), createdAt: new Date().toISOString(),
+    status: 'pending', source, scheduleId, day: dayKey(), createdAt: new Date().toISOString(),
   };
   if (isClient) user.stock -= amount;
   db().sends.push(send);
@@ -232,15 +251,162 @@ app.post('/api/send', requireAuth, wrap(async (req, res) => {
     send.finishedAt = new Date().toISOString();
     save();
   }
+  if (send.status === 'error') return fail(errorStatus, send.error, { send, stock: user.stock });
+  return { status: 200, body: { send, stock: user.stock, usedToday: uidUsage(targetId) } };
+}
 
-  if (send.status === 'error') return res.status(errorStatus).json({ error: send.error, send, stock: user.stock });
-  res.json({ send, stock: user.stock, usedToday: uidUsage(targetId) });
+app.post('/api/send', requireAuth, wrap(async (req, res) => {
+  const r = await performSend(req.user, req.body?.target_id, req.body?.amount, 'manual');
+  res.status(r.status).json(r.body);
 }));
 
+// Histórico com filtros: origem (manual | auto | api) e janela em dias.
 app.get('/api/sends', requireAuth, (req, res) => {
-  const list = db().sends.filter((s) => s.userId === req.user.id).slice(-200).reverse();
+  const days = Math.min(90, Math.max(1, toInt(req.query.days) || 30));
+  const since = Date.now() - days * 86400000;
+  const source = ['manual', 'auto', 'api'].includes(req.query.source) ? req.query.source : null;
+  const list = db().sends
+    .filter((s) => s.userId === req.user.id && Date.parse(s.createdAt) >= since && (!source || (s.source || 'manual') === source))
+    .slice(-500).reverse();
   res.json({ sends: list });
 });
+
+// ---------- Auto Likes (agendamentos diários) ----------
+const pad = (n) => String(n).padStart(2, '0');
+// Horário de Brasília (UTC-3, sem horário de verão desde 2019).
+function nextRunFrom(hour, minute, after = Date.now()) {
+  let t = Date.parse(`${dayKey(new Date(after))}T${pad(hour)}:${pad(minute)}:00-03:00`);
+  while (t <= after) t += 86400000;
+  return t;
+}
+const publicSchedule = (x) => ({ ...x, nextRunAt: x.status === 'active' ? new Date(x.nextRunAt).toISOString() : null });
+
+app.get('/api/schedules', requireAuth, (req, res) => {
+  const list = db().schedules.filter((x) => x.userId === req.user.id).slice().reverse().map(publicSchedule);
+  res.json({ schedules: list });
+});
+
+app.post('/api/schedules', requireAuth, (req, res) => {
+  const user = req.user;
+  const targetId = String(req.body?.target_id ?? '').trim();
+  const perDay = toInt(req.body?.per_day);
+  const days = toInt(req.body?.days);
+  const hour = toInt(req.body?.hour);
+  const minute = toInt(req.body?.minute ?? 0);
+  if (!UID_RE.test(targetId)) return res.status(400).json({ error: 'Informe um ID válido (somente números).' });
+  if (!Number.isInteger(perDay) || perDay < 1 || perDay > config.dailyLimitPerUid) return res.status(400).json({ error: 'Quantidade por dia deve ser entre 1 e 2.000.' });
+  if (!Number.isInteger(days) || days < 1 || days > 30) return res.status(400).json({ error: 'Duração deve ser entre 1 e 30 dias.' });
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23 || !Number.isInteger(minute) || minute < 0 || minute > 59) {
+    return res.status(400).json({ error: 'Horário inválido. Use hora de 0 a 23 e minuto de 0 a 59.' });
+  }
+  if (isExpired(user)) return res.status(403).json({ error: 'Seu acesso expirou. Renove seu plano com o administrador.' });
+  if (activeScheduleFor(targetId)) return res.status(409).json({ error: 'Este ID já tem um Auto Likes ativo.' });
+  if (user.role === 'client' && user.stock < perDay) return res.status(400).json({ error: `Estoque insuficiente para o primeiro envio (${perDay.toLocaleString('pt-BR')} likes).` });
+  if (db().schedules.filter((x) => x.userId === user.id && x.status === 'active').length >= 20) return res.status(400).json({ error: 'Limite de 20 agendamentos ativos.' });
+
+  const schedule = {
+    id: nextId('schedule'), userId: user.id, username: user.username, targetId, perDay, days, hour, minute,
+    runsDone: 0, likesSent: 0, status: 'active', nextRunAt: nextRunFrom(hour, minute), lastRun: null, createdAt: new Date().toISOString(),
+  };
+  db().schedules.push(schedule);
+  save();
+  res.json({ schedule: publicSchedule(schedule) });
+});
+
+app.post('/api/schedules/:id/cancel', requireAuth, (req, res) => {
+  const x = db().schedules.find((s) => s.id === Number(req.params.id) && (s.userId === req.user.id || req.user.role === 'admin'));
+  if (!x) return res.status(404).json({ error: 'Agendamento não encontrado.' });
+  if (x.status !== 'active') return res.status(400).json({ error: 'Este agendamento já terminou.' });
+  x.status = 'canceled';
+  save();
+  res.json({ schedule: publicSchedule(x) });
+});
+
+let schedulerBusy = false;
+async function runSchedules() {
+  if (schedulerBusy) return;
+  schedulerBusy = true;
+  try {
+    const now = Date.now();
+    for (const x of db().schedules.filter((s) => s.status === 'active' && s.nextRunAt <= now)) {
+      const user = db().users.find((u) => u.id === x.userId);
+      if (!user || user.status !== 'active') { x.status = 'canceled'; continue; }
+      const r = await performSend(user, x.targetId, x.perDay, 'auto', x.id);
+      x.runsDone += 1;
+      x.lastRun = { at: new Date().toISOString(), ok: r.status === 200, sent: r.body.send?.likesSent ?? 0, error: r.status === 200 ? null : r.body.error };
+      x.likesSent += x.lastRun.sent;
+      if (x.runsDone >= x.days) x.status = 'done';
+      else x.nextRunAt = nextRunFrom(x.hour, x.minute, Math.max(now, x.nextRunAt));
+    }
+  } catch (err) {
+    console.error('Erro no Auto Likes:', err);
+  } finally {
+    save();
+    schedulerBusy = false;
+  }
+}
+setInterval(runSchedules, 30000).unref();
+
+// ---------- API pública dos clientes (mesmo formato da documentação) ----------
+const apiHits = new Map();
+function apiKeyAuth(req, res, next) {
+  const key = String(req.get('X-Api-Key') || '');
+  const user = key && db().users.find((u) => u.apiKey && u.apiKey.length === key.length && crypto.timingSafeEqual(Buffer.from(u.apiKey), Buffer.from(key)));
+  if (!user) return res.status(401).json({ error: 'Header X-Api-Key ausente ou com valor inválido.' });
+  if (user.status !== 'active') return res.status(403).json({ error: 'Conta desativada pelo administrador.' });
+  if (isExpired(user)) return res.status(403).json({ error: 'Conta com data de expiração ultrapassada. Entre em contato com o suporte.' });
+  const minute = Math.floor(Date.now() / 60000);
+  const hit = apiHits.get(user.id);
+  const count = hit && hit.minute === minute ? hit.count + 1 : 1;
+  apiHits.set(user.id, { minute, count });
+  if (count > 60) return res.status(429).json({ error: 'Muitas requisições. Limite de 60 por minuto.' });
+  req.user = user;
+  next();
+}
+
+app.post('/api/me/apikey', requireAuth, (req, res) => {
+  if (req.user.role !== 'client') return res.status(400).json({ error: 'A API é para contas de cliente.' });
+  req.user.apiKey = `ls_${crypto.randomBytes(24).toString('hex')}`;
+  save();
+  res.json({ apiKey: req.user.apiKey });
+});
+
+app.post('/api/v1/likes/send', apiKeyAuth, wrap(async (req, res) => {
+  const r = await performSend(req.user, req.body?.target_id, req.body?.amount, 'api');
+  if (r.status !== 200) return res.status(r.status === 502 ? 500 : r.status).json({ error: r.body.error });
+  const { send, stock } = r.body;
+  res.json({ likes_sent: send.likesSent, remaining: stock, player_nickname: send.nickname, log_id: send.id });
+}));
+
+app.get('/api/v1/balance', apiKeyAuth, (req, res) => {
+  const u = req.user;
+  const used = usedTotal(u.id);
+  const today = dayKey();
+  res.json({
+    plan_type: 'stock', remaining: u.stock, stock_limit: used + u.stock, stock_used: used, daily_limit: 0,
+    used_today: db().sends.filter((s) => s.userId === u.id && s.day === today && s.status === 'success').reduce((a, s) => a + s.likesSent, 0),
+    expiry_date: u.expiresAt || null,
+  });
+});
+
+app.get('/api/v1/logs', apiKeyAuth, (req, res) => {
+  const limit = Math.min(100, Math.max(1, toInt(req.query.limit) || 20));
+  const days = Math.min(30, Math.max(1, toInt(req.query.days) || 7));
+  const since = Date.now() - days * 86400000;
+  const logs = db().sends.filter((s) => s.userId === req.user.id && Date.parse(s.createdAt) >= since && s.status !== 'pending')
+    .slice(-limit).reverse()
+    .map((s) => ({ log_id: s.id, target_id: s.targetId, likes_sent: s.likesSent, status: s.status === 'success' ? 'success' : 'error', action: SOURCES[s.source || 'manual'], timestamp: s.createdAt.slice(0, 19) }));
+  res.json(logs);
+});
+
+app.get('/api/v1/player/:uid', apiKeyAuth, wrap(async (req, res) => {
+  if (!UID_RE.test(req.params.uid)) return res.status(400).json({ error: 'UID inválido.' });
+  try {
+    res.json(await likeApi.player(req.params.uid));
+  } catch {
+    res.status(500).json({ error: 'Erro ao buscar jogador' });
+  }
+}));
 
 // ---------- Pedidos de estoque ----------
 app.post('/api/orders', requireAuth, (req, res) => {
@@ -341,6 +507,10 @@ app.patch('/api/admin/users/:id', requireAdmin, (req, res) => {
     if (!Number.isInteger(delta) || user.stock + delta < 0) return res.status(400).json({ error: 'Ajuste de estoque inválido.' });
     user.stock += delta;
   }
+  if (b.expiresAt !== undefined) {
+    if (b.expiresAt !== null && !DATE_RE.test(String(b.expiresAt))) return res.status(400).json({ error: 'Data de validade inválida.' });
+    user.expiresAt = b.expiresAt || null;
+  }
   if (b.note !== undefined) user.note = String(b.note).slice(0, 200);
   if (b.contact !== undefined) user.contact = String(b.contact).slice(0, 120);
   save();
@@ -404,6 +574,10 @@ app.get('/api/admin/sends', requireAdmin, (req, res) => {
   res.json({ sends: db().sends.slice(-500).reverse() });
 });
 
+app.get('/api/admin/schedules', requireAdmin, (req, res) => {
+  res.json({ schedules: db().schedules.slice().reverse().slice(0, 300).map(publicSchedule) });
+});
+
 app.get('/api/admin/remote-logs', requireAdmin, wrap(async (req, res) => {
   const limit = Math.min(100, Math.max(1, toInt(req.query.limit) || 50));
   const days = Math.min(30, Math.max(1, toInt(req.query.days) || 7));
@@ -441,6 +615,7 @@ app.use((err, req, res, next) => {
 
 app.listen(config.port, () => {
   console.log(`LikeSystem rodando em http://localhost:${config.port}`);
+  runSchedules();
   if (config.mock) console.log('⚠  MOCK_API=1 — envios simulados, nenhum like real é enviado.');
   else if (!config.apiKey) console.log('⚠  LIKESYSTEM_API_KEY não definida — envios ficarão indisponíveis.');
 });

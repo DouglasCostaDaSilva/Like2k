@@ -9,11 +9,12 @@ const file = path.join(config.dataDir, 'db.json');
 const MAX_SENDS = 50000;
 
 const defaults = () => ({
-  seq: { user: 0, order: 0, send: 0 },
+  seq: { user: 0, order: 0, send: 0, schedule: 0 },
   users: [],
   sessions: {},
   orders: [],
   sends: [],
+  schedules: [],
   settings: {
     pixKey: '',
     pixHolder: '',

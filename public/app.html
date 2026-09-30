@@ -43,13 +43,19 @@
 
       <!-- ============ CLIENTE: PAINEL ============ -->
       <section class="view" data-view="dashboard">
-        <div class="top"><div><h1>Olá, <span class="grad" id="helloName"></span></h1><p>Seu estoque e seus envios em tempo real.</p></div>
+        <div class="top"><div><h1>Olá, <span class="grad" id="helloName"></span></h1><p>Bem-vindo ao seu painel. <span class="pill active" id="kStatus">Ativo</span></p></div>
           <button class="btn btn-primary" data-go="send">Enviar likes</button></div>
+        <div class="banner warn hidden" id="lowStock"></div>
         <div class="grid cards">
-          <div class="card glass kpi hot"><div class="label">Estoque individual</div><div class="value" id="kStock">—</div><div class="hint">likes disponíveis para você</div></div>
-          <div class="card glass kpi"><div class="label"><i class="dot" id="kGlobalDot"></i>Estoque global</div><div class="value" id="kGlobal">—</div><div class="hint" id="kGlobalHint">likes disponíveis na plataforma</div></div>
-          <div class="card glass kpi"><div class="label">Enviados hoje</div><div class="value" id="kToday">—</div><div class="hint">por você</div></div>
-          <div class="card glass kpi"><div class="label">Total enviado</div><div class="value" id="kTotal">—</div><div class="hint" id="kCount"></div></div>
+          <div class="card glass kpi"><div class="label">Limite total</div><div class="value" id="kLimit">—</div><div class="hint">tudo que já entrou no seu estoque</div></div>
+          <div class="card glass kpi"><div class="label">Usado total</div><div class="value" id="kUsed">—</div><div class="hint" id="kCount"></div></div>
+          <div class="card glass kpi hot"><div class="label">Restantes</div><div class="value" id="kStock">—</div><div class="hint">likes disponíveis para enviar</div></div>
+          <div class="card glass kpi"><div class="label">Expira em</div><div class="value" id="kExpiry">—</div><div class="hint" id="kExpiryHint">validade do seu acesso</div></div>
+        </div>
+        <div class="card glass" style="margin-top:16px">
+          <div class="card-head"><div><h3>Progresso do estoque</h3><p class="sub" id="kProgressText"></p></div><strong class="grad mono" id="kProgressPct">0%</strong></div>
+          <div class="meter big"><i id="kProgress" style="width:0"></i></div>
+          <div class="progress-foot"><span><i class="dot"></i>Estoque global <b class="mono" id="kGlobal">—</b></span><span>Enviados hoje <b class="mono" id="kToday">—</b></span><span>Auto Likes ativos <b class="mono" id="kAuto">—</b></span></div>
         </div>
         <div class="card glass" style="margin-top:16px">
           <div class="card-head"><div><h3>Últimos envios</h3><p class="sub">Seus 8 envios mais recentes</p></div><button class="btn btn-sm" data-go="history">Ver tudo</button></div>
@@ -125,10 +131,72 @@
         </div>
       </section>
 
+      <!-- ============ AUTO LIKES ============ -->
+      <section class="view" data-view="auto">
+        <div class="top"><div><h1>Auto <span class="grad">Likes</span></h1><p>Configure envios automáticos diários por um período. O envio sai todo dia no horário escolhido (horário de Brasília).</p></div></div>
+        <div class="grid two side-form">
+          <form class="card glass form" id="autoForm" autocomplete="off">
+            <h3>Novo agendamento</h3>
+            <div class="field"><label for="aId">ID do alvo</label><input class="input mono" id="aId" inputmode="numeric" placeholder="Ex.: 4463008763" required maxlength="15" /></div>
+            <div class="field"><label for="aQty">Quantidade por dia</label><input class="input mono" id="aQty" type="number" min="1" max="2000" placeholder="1–2000" required /></div>
+            <div class="field"><label for="aDays">Duração (dias)</label><input class="input mono" id="aDays" type="number" min="1" max="30" value="7" required /></div>
+            <div class="field"><label>Horário do envio</label>
+              <div class="row"><input class="input mono" id="aHour" type="number" min="0" max="23" value="12" aria-label="Hora" required /><input class="input mono" id="aMin" type="number" min="0" max="59" value="0" aria-label="Minuto" required /></div>
+            </div>
+            <div class="summary" id="aSummary"></div>
+            <div class="alert" id="aMsg"></div>
+            <button class="btn btn-primary btn-block" type="submit">Criar agendamento diário</button>
+          </form>
+          <div class="card glass">
+            <div class="card-head"><div><h3>Meus agendamentos</h3><p class="sub">Enquanto um Auto Likes estiver ativo, o ID não recebe envios manuais</p></div></div>
+            <div id="aList" class="list"></div>
+          </div>
+        </div>
+      </section>
+
       <!-- ============ HISTÓRICO ============ -->
       <section class="view" data-view="history">
-        <div class="top"><div><h1>Histó<span class="grad">rico</span></h1><p>Todos os seus envios.</p></div></div>
-        <div class="card glass"><div class="table-wrap" id="hTable"></div></div>
+        <div class="top"><div><h1>Histórico de <span class="grad">envios</span></h1><p>Envios manuais, automáticos e pela API.</p></div></div>
+        <div class="card glass">
+          <div class="filters">
+            <div class="chips" id="hSource">
+              <button class="chip on" data-src="">Todos</button><button class="chip" data-src="manual">Manual</button><button class="chip" data-src="auto">Agendado</button><button class="chip" data-src="api">API</button>
+            </div>
+            <select class="input" id="hDays" aria-label="Período">
+              <option value="1">Últimas 24 horas</option><option value="7" selected>Últimos 7 dias</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option>
+            </select>
+          </div>
+          <p class="sub" id="hCount" style="margin:14px 0 6px"></p>
+          <div id="hList" class="list"></div>
+        </div>
+      </section>
+
+      <!-- ============ API ============ -->
+      <section class="view" data-view="api">
+        <div class="top"><div><h1>API <span class="grad">REST</span></h1><p>Integre o envio de likes nas suas aplicações. Todos os endpoints retornam JSON e usam sua API Key.</p></div></div>
+        <div class="grid two">
+          <div class="card glass form">
+            <h3>Sua API Key</h3>
+            <p class="sub">Envie no header <code>X-Api-Key</code> de cada requisição. Não compartilhe: ela identifica tudo que for feito em seu nome.</p>
+            <div class="keybox"><code id="kApiKey">—</code></div>
+            <div class="row"><button class="btn btn-sm" type="button" id="kCopy">Copiar</button><button class="btn btn-sm" type="button" id="kShow">Mostrar</button><button class="btn btn-sm btn-danger" type="button" id="kNew">Gerar nova chave</button></div>
+            <div class="summary">
+              <div><span class="muted">Base URL</span><b class="mono" id="kBase"></b></div>
+              <div><span class="muted">Formato</span><b>application/json</b></div>
+              <div><span class="muted">Limite</span><b>60 requisições por minuto</b></div>
+            </div>
+          </div>
+          <div class="card glass docs">
+            <h3>Endpoints</h3>
+            <div class="ep"><span class="m post">POST</span><code>/api/v1/likes/send</code><p>Envia likes para um UID. Corpo: <code>target_id</code> (texto) e <code>amount</code> (1–2000). Debita do seu estoque.</p></div>
+            <div class="ep"><span class="m get">GET</span><code>/api/v1/balance</code><p>Saldo: <code>remaining</code>, <code>stock_limit</code>, <code>stock_used</code>, <code>used_today</code>, <code>expiry_date</code>.</p></div>
+            <div class="ep"><span class="m get">GET</span><code>/api/v1/logs?limit=50&amp;days=14</code><p>Histórico de envios (até 100 registros, até 30 dias).</p></div>
+            <div class="ep"><span class="m get">GET</span><code>/api/v1/player/{uid}</code><p>Dados do jogador: nickname, região, likes do perfil.</p></div>
+            <h3 style="margin-top:14px">Exemplo</h3>
+            <pre class="code" id="kExample"></pre>
+            <p class="sub">Erros: 400 parâmetros inválidos ou estoque insuficiente · 401 chave ausente ou inválida · 403 conta desativada ou expirada · 500 falha na API do Free Fire. Todos retornam <code>{"error": "mensagem"}</code>.</p>
+          </div>
+        </div>
       </section>
 
       <!-- ============ ADMIN: CLIENTES ============ -->

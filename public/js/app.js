@@ -25,14 +25,16 @@ const ICONS = {
   settings: icon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
 };
 ICONS.overview = ICONS.dashboard;
+ICONS.auto = icon('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9 2h6M12 2v3"/>');
+ICONS.api = icon('<path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/>');
 
 const MENUS = {
-  client: [['dashboard', 'Painel'], ['send', 'Enviar likes'], ['buy', 'Comprar estoque'], ['history', 'Histórico']],
+  client: [['dashboard', 'Painel'], ['send', 'Enviar likes'], ['auto', 'Auto Likes'], ['history', 'Histórico'], ['buy', 'Comprar estoque'], ['api', 'API']],
   admin: [['overview', 'Visão geral'], ['send', 'Enviar likes'], ['clients', 'Clientes'], ['requests', 'Solicitações'], ['orders', 'Pedidos'], ['sends', 'Envios'], ['settings', 'Configurações']],
 };
 
 // Ângulo do traje 3D para cada tela — ele gira ao trocar de tela.
-const VIEW_ANGLE = { dashboard: -0.45, overview: -0.45, send: 0.55, buy: Math.PI + 0.3, history: 1.4, clients: -1.2, requests: 2.2, orders: Math.PI - 0.4, sends: 0.9, settings: -2.4 };
+const VIEW_ANGLE = { auto: -1.0, api: 2.6, dashboard: -0.45, overview: -0.45, send: 0.55, buy: Math.PI + 0.3, history: 1.4, clients: -1.2, requests: 2.2, orders: Math.PI - 0.4, sends: 0.9, settings: -2.4 };
 let rotY = -0.45;
 
 function applyPose(view) {
@@ -135,7 +137,7 @@ function busy(btn, on, label) {
 // ------------------------------------------------------------------ dados base
 async function loadMe() {
   const r = await api('/api/me');
-  Object.assign(state, { me: r.user, rules: r.rules, global: r.global, stats: r.stats, settings: r.settings });
+  Object.assign(state, { me: r.user, rules: r.rules, global: r.global, stats: r.stats, settings: r.settings, apiKey: r.apiKey });
   $('#mockBanner').classList.toggle('hidden', !r.mock);
   $('#meName').textContent = r.user.username;
   $('#meRole').textContent = r.user.role === 'admin' ? 'Administrador' : 'Cliente';
@@ -146,24 +148,50 @@ async function loadMe() {
 
 function renderStockKpis() {
   const { me, global, stats } = state;
+  const limit = me.usedTotal + me.stock;
+  const pct = limit ? Math.round((me.usedTotal / limit) * 100) : 0;
+  $('#kLimit').textContent = int(limit);
+  $('#kUsed').textContent = int(me.usedTotal);
+  $('#kCount').textContent = `${int(stats.sendsCount)} envios no total`;
   $('#kStock').textContent = int(me.stock);
+  $('#kExpiry').textContent = me.expiresAt ? new Date(`${me.expiresAt}T12:00:00`).toLocaleDateString('pt-BR') : '∞';
+  $('#kExpiryHint').textContent = me.expired ? 'acesso expirado: renove seu plano' : me.expiresAt ? 'validade do seu acesso' : 'sem data de expiração';
+  $('#kStatus').textContent = me.expired ? 'Expirado' : 'Ativo';
+  $('#kStatus').className = `pill ${me.expired ? 'blocked' : 'active'}`;
+  $('#kProgress').style.width = `${pct}%`;
+  $('#kProgressPct').textContent = `${pct}%`;
+  $('#kProgressText').textContent = `${int(me.usedTotal)} de ${int(limit)} likes usados`;
   $('#kGlobal').textContent = global.remaining == null ? 'indisponível' : int(global.remaining);
-  $('#kGlobalDot').classList.toggle('off', global.remaining == null);
-  $('#kGlobalHint').textContent = global.error ? 'API temporariamente indisponível' : 'likes disponíveis na plataforma';
   $('#kToday').textContent = int(stats.sentToday);
-  $('#kTotal').textContent = int(stats.sentTotal);
-  $('#kCount').textContent = `${int(stats.sendsCount)} envios`;
+  $('#kAuto').textContent = int(stats.activeSchedules || 0);
+  const low = me.role === 'client' && me.stock < 5000;
+  $('#lowStock').classList.toggle('hidden', !low);
+  if (low) $('#lowStock').innerHTML = `<span>⚠</span><span><b>Estoque abaixo de 5.000 likes</b>: restam ${int(me.stock)}. <a href="#buy" data-go="buy" class="grad">Renove seu estoque →</a></span>`;
 }
 
+const SOURCE_LABEL = { manual: 'Manual', auto: 'Agendado', api: 'API' };
+const tag = (src) => `<span class="tag ${esc(src || 'manual')}">${SOURCE_LABEL[src || 'manual']}</span>`;
 const sendRow = (s, withUser = false) => `<tr>
   <td>${dt(s.createdAt)}</td>
   ${withUser ? `<td>${esc(s.username)}</td>` : ''}
+  <td>${tag(s.source)}</td>
   <td class="mono">${esc(s.targetId)}</td>
   <td>${esc(s.nickname || '—')}</td>
   <td class="num">${int(s.status === 'success' ? s.likesSent : s.amount)}</td>
   <td>${pill(s.status)}${s.error ? `<span class="err-text" title="${esc(s.error)}">${esc(s.error)}</span>` : ''}</td>
 </tr>`;
-const SEND_HEAD = ['Data', 'ID', 'Nick', 'Likes', 'Status'];
+const SEND_HEAD = ['Data', 'Origem', 'ID', 'Nick', 'Likes', 'Status'];
+
+// cartão de envio (histórico no estilo lista, bom no celular)
+const sendItem = (s) => {
+  const ok = s.status === 'success';
+  return `<div class="item ${ok ? '' : s.status === 'error' ? 'err' : ''}">
+    <div class="who">${tag(s.source)}${s.nickname ? `<strong>${esc(s.nickname)}</strong><span class="uid mono">(${esc(s.targetId)})</span>` : `<strong class="mono">${esc(s.targetId)}</strong>`}</div>
+    <div class="qty">${int(ok ? s.likesSent : 0)}</div>
+    <div class="meta">${dt(s.createdAt)}</div>
+    <div class="state">${ok ? '<span class="pill success">Enviado</span>' : `${pill(s.status)}${s.error ? `<span class="err-text" title="${esc(s.error)}">${esc(s.error)}</span>` : ''}`}</div>
+  </div>`;
+};
 
 // ------------------------------------------------------------------ cliente: painel
 LOADERS.dashboard = async () => {
@@ -173,10 +201,96 @@ LOADERS.dashboard = async () => {
   $('#recentSends').innerHTML = table(SEND_HEAD, sends.slice(0, 8).map((s) => sendRow(s)), 'Você ainda não fez envios. <a href="#send" data-go="send" class="grad">Enviar agora →</a>');
 };
 
+let hSource = '';
 LOADERS.history = async () => {
-  const { sends } = await api('/api/sends');
-  $('#hTable').innerHTML = table(SEND_HEAD, sends.map((s) => sendRow(s)));
+  const { sends } = await api(`/api/sends?days=${$('#hDays').value}${hSource ? `&source=${hSource}` : ''}`);
+  $('#hCount').textContent = `${int(sends.length)} ${sends.length === 1 ? 'envio encontrado' : 'envios encontrados'}`;
+  $('#hList').innerHTML = sends.length ? sends.map(sendItem).join('') : '<div class="empty">Nenhum envio neste filtro.</div>';
 };
+$('#hSource').addEventListener('click', (e) => {
+  const c = e.target.closest('[data-src]');
+  if (!c) return;
+  hSource = c.dataset.src;
+  $$('#hSource .chip').forEach((x) => x.classList.toggle('on', x === c));
+  LOADERS.history();
+});
+$('#hDays').addEventListener('change', () => LOADERS.history());
+
+// ------------------------------------------------------------------ Auto Likes
+const pad2 = (n) => String(n).padStart(2, '0');
+function renderAutoSummary() {
+  const qty = Number($('#aQty').value) || 0, days = Number($('#aDays').value) || 0;
+  $('#aSummary').innerHTML = `
+    <div><span class="muted">Envio diário</span><b>${int(qty)} likes às ${pad2(Number($('#aHour').value) || 0)}:${pad2(Number($('#aMin').value) || 0)}</b></div>
+    <div><span class="muted">Duração</span><b>${int(days)} ${days === 1 ? 'dia' : 'dias'}</b></div>
+    <div class="total"><span>Total do período</span><b class="grad">${int(qty * days)} likes</b></div>
+    ${state.me.role === 'client' ? `<div><span class="muted">Seu estoque</span><b>${int(state.me.stock)}</b></div>` : ''}`;
+}
+['#aQty', '#aDays', '#aHour', '#aMin'].forEach((id) => $(id).addEventListener('input', renderAutoSummary));
+$('#aId').addEventListener('input', (e) => { e.target.value = e.target.value.replace(/\D/g, ''); });
+
+const SCHED_STATUS = { active: ['active', 'Ativo'], done: ['paid', 'Concluído'], canceled: ['canceled', 'Cancelado'] };
+async function loadSchedules() {
+  const { schedules } = await api('/api/schedules');
+  $('#aList').innerHTML = schedules.length ? schedules.map((x) => {
+    const [cls, label] = SCHED_STATUS[x.status] || ['pending', x.status];
+    const last = x.lastRun ? `Último: ${dt(x.lastRun.at)} · ${x.lastRun.ok ? `${int(x.lastRun.sent)} likes` : esc(x.lastRun.error || 'erro')}` : 'Ainda não executado';
+    return `<div class="item ${x.lastRun && !x.lastRun.ok ? 'err' : ''}">
+      <div class="who"><span class="pill ${cls}">${label}</span><strong class="mono">${esc(x.targetId)}</strong></div>
+      <div class="qty">${int(x.perDay)}/dia</div>
+      <div class="meta">${pad2(x.hour)}:${pad2(x.minute)} · dia ${Math.min(x.runsDone, x.days)} de ${x.days} · ${int(x.likesSent)} enviados${x.nextRunAt ? ` · próximo ${dt(x.nextRunAt)}` : ''}<br>${last}</div>
+      <div class="state">${x.status === 'active' ? `<button class="btn btn-xs btn-danger" data-sched-cancel="${x.id}">Cancelar</button>` : ''}</div>
+    </div>`;
+  }).join('') : '<div class="empty">Nenhum agendamento configurado.</div>';
+}
+$('#aList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-sched-cancel]');
+  if (!b) return;
+  modal({ title: 'Cancelar Auto Likes', text: 'Os envios diários deste ID param agora. Envios já feitos continuam no histórico.', okText: 'Cancelar agendamento', danger: true,
+    onOk: async () => { await api(`/api/schedules/${b.dataset.schedCancel}/cancel`, { method: 'POST' }); toast('Agendamento cancelado.'); loadSchedules(); } });
+});
+$('#autoForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.submitter || $('#autoForm button[type=submit]');
+  busy(btn, true, ' Criando…');
+  try {
+    await api('/api/schedules', { method: 'POST', body: { target_id: $('#aId').value, per_day: Number($('#aQty').value), days: Number($('#aDays').value), hour: Number($('#aHour').value), minute: Number($('#aMin').value) } });
+    alertBox($('#aMsg'), 'Agendamento criado! O primeiro envio sai no próximo horário marcado.', 'ok');
+    scene?.spin();
+    loadSchedules();
+  } catch (err) { alertBox($('#aMsg'), err.message); } finally { busy(btn, false); }
+});
+LOADERS.auto = async () => { await loadMe(); renderAutoSummary(); loadSchedules(); };
+
+// ------------------------------------------------------------------ API
+let keyVisible = false;
+function renderApi() {
+  const key = state.apiKey;
+  const shown = key ? (keyVisible ? key : `${key.slice(0, 7)}${'•'.repeat(24)}${key.slice(-4)}`) : 'Nenhuma chave gerada ainda';
+  $('#kApiKey').textContent = shown;
+  $('#kShow').textContent = keyVisible ? 'Ocultar' : 'Mostrar';
+  $('#kCopy').disabled = $('#kShow').disabled = !key;
+  $('#kNew').textContent = key ? 'Gerar nova chave' : 'Gerar chave';
+  const base = location.origin && location.origin !== 'null' ? location.origin : 'https://seu-dominio';
+  $('#kBase').textContent = base;
+  $('#kExample').textContent = `curl -X POST ${base}/api/v1/likes/send \\
+     -H "X-Api-Key: SUA_API_KEY_AQUI" \\
+     -H "Content-Type: application/json" \\
+     -d '{"target_id": "123456789", "amount": 2000}'
+
+# resposta
+{ "likes_sent": 2000, "remaining": 8000, "player_nickname": "NomeJogador", "log_id": 142 }`;
+}
+$('#kShow').addEventListener('click', () => { keyVisible = !keyVisible; renderApi(); });
+$('#kCopy').addEventListener('click', () => {
+  navigator.clipboard?.writeText(state.apiKey).then(() => toast('API Key copiada.')).catch(() => { keyVisible = true; renderApi(); toast('Selecione e copie a chave.', 'error'); });
+});
+$('#kNew').addEventListener('click', () => {
+  const run = async () => { const r = await api('/api/me/apikey', { method: 'POST' }); state.apiKey = r.apiKey; keyVisible = true; renderApi(); toast('Nova API Key gerada.'); };
+  if (!state.apiKey) { run().catch((err) => toast(err.message, 'error')); return; }
+  modal({ title: 'Gerar nova API Key', text: 'A chave atual para de funcionar na hora. Atualize suas integrações com a nova.', okText: 'Gerar nova', danger: true, onOk: run });
+});
+LOADERS.api = async () => { await loadMe(); renderApi(); };
 
 // ------------------------------------------------------------------ enviar likes
 const sId = $('#sId'), sAmount = $('#sAmount'), sRange = $('#sRange');
@@ -459,10 +573,12 @@ function renderClients() {
   const q = $('#cSearch').value.trim().toLowerCase();
   const list = clients.filter((u) => u.status !== 'pending' && (!q || u.username.toLowerCase().includes(q) || u.contact.toLowerCase().includes(q)));
   $('#cCount').textContent = `${int(list.length)} clientes · ${int(list.reduce((a, u) => a + u.stock, 0))} likes alocados`;
-  $('#cTable').innerHTML = table(['Usuário', 'Status', 'Estoque', 'Contato', 'Último login', ''], list.map((u) => `<tr>
-    <td><strong>${esc(u.username)}</strong></td><td>${pill(u.status)}</td><td class="num">${int(u.stock)}</td><td>${esc(u.contact || '—')}</td><td>${dt(u.lastLoginAt)}</td>
+  $('#cTable').innerHTML = table(['Usuário', 'Status', 'Estoque', 'Usado', 'Validade', 'Contato', 'Último login', ''], list.map((u) => `<tr>
+    <td><strong>${esc(u.username)}</strong></td><td>${u.expired ? pill('blocked').replace('Bloqueado', 'Expirado') : pill(u.status)}</td><td class="num">${int(u.stock)}</td><td class="num">${int(u.usedTotal)}</td>
+    <td>${u.expiresAt ? new Date(`${u.expiresAt}T12:00:00`).toLocaleDateString('pt-BR') : '∞'}</td><td>${esc(u.contact || '—')}</td><td>${dt(u.lastLoginAt)}</td>
     <td><div class="actions">
       <button class="btn btn-xs" data-stock="${u.id}">Estoque</button>
+      <button class="btn btn-xs" data-exp="${u.id}">Validade</button>
       <button class="btn btn-xs" data-pass="${u.id}">Senha</button>
       <button class="btn btn-xs ${u.status === 'active' ? 'btn-danger' : 'btn-ok'}" data-toggle="${u.id}">${u.status === 'active' ? 'Bloquear' : 'Ativar'}</button>
       <button class="btn btn-xs btn-danger" data-del="${u.id}" aria-label="Excluir">✕</button>
@@ -496,6 +612,10 @@ $('#cTable').addEventListener('click', (e) => {
     });
     const upd = () => { $('#mNew').textContent = `Novo estoque: ${int(u.stock + (Number($('#mDelta').value) || 0))} likes`; };
     $('#mDelta').addEventListener('input', upd); upd();
+  } else if ((u = find('data-exp'))) {
+    modal({ title: `Validade de ${u.username}`, text: 'Depois dessa data o cliente não consegue enviar likes nem usar a API. Deixe em branco para sem expiração.',
+      body: `<div class="field"><label>Expira em</label><input class="input mono" id="mExp" type="date" value="${esc(u.expiresAt || '')}" /></div>`, okText: 'Salvar',
+      onOk: async () => { await patch(u, { expiresAt: $('#mExp').value || null }); toast('Validade atualizada.'); LOADERS.clients(); } });
   } else if ((u = find('data-pass'))) {
     modal({ title: `Nova senha para ${u.username}`, body: '<div class="field"><label>Senha</label><input class="input" id="mPass" minlength="6" /></div>', okText: 'Salvar',
       onOk: async () => { await patch(u, { password: $('#mPass').value }); toast('Senha alterada.'); } });

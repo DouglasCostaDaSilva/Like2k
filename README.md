@@ -17,6 +17,15 @@ Site dark em 3D para venda e envio de likes (Free Fire), com login fechado, esto
 - **Estoque global:** saldo real da conta na API (`/api/balance`). O admin vê global, alocado aos clientes e livre para vender; ao aprovar um pedido maior que o livre, o painel avisa.
 - **Pedidos:** o cliente gera o pedido e vê a chave PIX configurada pelo admin; o admin aprova após o pagamento e o estoque é creditado.
 
+## Funções do cliente
+
+- **Painel:** limite total, usado total, restantes, validade, progresso do estoque e aviso quando o estoque fica abaixo de 5.000.
+- **Enviar likes:** ID + quantidade (1–2.000), com conferência do nick antes.
+- **Auto Likes:** envio automático diário para um ID (quantidade por dia, duração em dias, horário de Brasília). Enquanto ativo, o ID não recebe envios manuais.
+- **Histórico:** filtros Todos / Manual / Agendado / API e período.
+- **API REST própria:** cada cliente gera sua chave e usa `/api/v1/likes/send`, `/api/v1/balance`, `/api/v1/logs` e `/api/v1/player/{uid}` com o header `X-Api-Key`, no mesmo formato da API original, debitando do estoque dele.
+- **Admin:** define a validade de cada cliente (depois dela, envios e API ficam bloqueados).
+
 ## Rodando
 
 ```bash
