@@ -24,7 +24,7 @@ const poses = () => (isNarrow()
       access: { x: 0, y: 1.55, rotY: 0.1, rotX: 0.04, scale: 0.95, camY: 0.2, crop: 1 },
     }
   : {
-      hero: { x: 0, y: 1.1, rotY: 0, rotX: 0.02, scale: 0.8, camY: 0.2, crop: 0 },
+      hero: { x: 0, y: 0.5, rotY: 0, rotX: 0.02, scale: 1.22, camY: 0.2, crop: 0 },
       steps: { x: -2.3, y: 0.0, rotY: 0.4, rotX: 0.04, scale: 1.25, camY: 0.2, crop: 1 },
       pricing: { x: 2.35, y: 0.0, rotY: -0.45, rotX: -0.02, scale: 1.25, camY: 0.15, crop: 1 },
       access: { x: 2.35, y: 0.0, rotY: -0.25, rotX: 0.03, scale: 1.25, camY: 0.2, crop: 1 },

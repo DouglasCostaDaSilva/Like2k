@@ -266,7 +266,10 @@ h3 { letter-spacing: 0.02em; }
 
 /* topo: arte inteira centralizada, texto embaixo */
 @media (min-width: 861px) {
-  .hero { align-items: flex-start; padding-top: 63vh; text-align: center; }
+  .hero { align-items: flex-start; padding-top: 66vh; text-align: center; }
+  .hero-copy { position: relative; }
+  .hero-copy::before { content: ''; position: absolute; inset: -90px -180px -40px; z-index: -1; pointer-events: none;
+    background: radial-gradient(closest-side, rgba(7, 7, 10, 0.82), rgba(7, 7, 10, 0.5) 55%, transparent); }
   .scroll-hint { display: none; }
   .hero-copy { max-width: 760px; margin: 0 auto; }
   .hero h1 { font-size: clamp(40px, 5.4vw, 78px); margin: 14px 0 16px; }
