@@ -8,8 +8,8 @@ import * as THREE from 'three';
 export const HERO_CHAR = 'img/hero-char.webp';
 export const HERO_DEPTH = 'img/hero-char-depth.png';
 export const HERO_GLOW = 'img/hero-char-glow.png';
-const CHAR_ASPECT = 444 / 1024; // recorte do personagem
-const GLOW_PAD = { w: 644 / 444, h: 1224 / 1024 }; // aura tem margem em volta da silhueta
+const CHAR_ASPECT = 443 / 1024; // recorte do personagem
+const GLOW_PAD = { w: 643 / 443, h: 1224 / 1024 }; // aura tem margem em volta da silhueta
 
 function mulberry32(a) {
   return () => {
@@ -31,38 +31,76 @@ const NOISE = /* glsl */`
 `;
 
 // ---- personagem: volume, respiração, luz de fogo e contorno laranja
-const charMaterial = (map, depth) => new THREE.ShaderMaterial({
-  uniforms: { uMap: { value: map }, uDepth: { value: depth }, uTime: { value: 0 }, uFire: { value: 1 }, uIntro: { value: 0 } },
+const charMaterial = (map, depth, size) => new THREE.ShaderMaterial({
+  uniforms: {
+    uMap: { value: map }, uDepth: { value: depth }, uTime: { value: 0 }, uFire: { value: 1 }, uIntro: { value: 0 },
+    uSize: { value: size }, uPower: { value: 0 }, uBlink: { value: 0 }, uLook: { value: new THREE.Vector2() },
+  },
   vertexShader: /* glsl */`
-    uniform sampler2D uDepth; uniform float uTime;
-    varying vec2 vUv; varying float vD;
+    uniform sampler2D uDepth; uniform float uTime; uniform vec2 uSize; uniform float uPower; uniform vec2 uLook;
+    varying vec2 vUv;
+    // gira o ponto p em volta do pivô (em uv) pelo ângulo a, com peso w
+    vec2 rot(vec2 p, vec2 pivotUv, float a, float w){
+      vec2 pv = (pivotUv - 0.5) * uSize;
+      vec2 d = p - pv;
+      float c = cos(a * w), s = sin(a * w);
+      return pv + vec2(c * d.x - s * d.y, s * d.x + c * d.y);
+    }
     void main(){
       vUv = uv;
-      float d = texture2D(uDepth, uv).r;
-      vD = d;
       vec3 p = position;
-      float chest = smoothstep(0.42, 0.62, uv.y) * (1.0 - smoothstep(0.8, 0.9, uv.y));
-      float breath = sin(uTime * 2.1);
-      p.x *= 1.0 + breath * 0.008 * chest;              // peito expande
-      p.y += (breath * 0.012) * smoothstep(0.4, 1.0, uv.y); // ombros e cabeça sobem
-      p.z += d * 0.34;
+      float t = uTime;
+      float breath = sin(t * 2.1);
+      // braços (soltos do tronco a partir da axila): balanço + abrir no "poder"
+      float armL = (1.0 - smoothstep(0.275, 0.292, uv.x)) * smoothstep(0.0, 0.12, 0.76 - uv.y) * step(0.36, uv.y);
+      float armR = smoothstep(0.708, 0.725, uv.x) * smoothstep(0.0, 0.12, 0.76 - uv.y) * step(0.36, uv.y);
+      float swing = sin(t * 1.3) * 0.045 + breath * 0.012;
+      p.xy = rot(p.xy, vec2(0.265, 0.765), -swing - 0.22 * uPower, armL);
+      p.xy = rot(p.xy, vec2(0.735, 0.765), -swing * 0.8 + 0.22 * uPower, armR);
+      // tronco: respira e o peso passa de uma perna para a outra (pés ficam no chão)
+      float chest = smoothstep(0.42, 0.62, uv.y) * (1.0 - smoothstep(0.78, 0.84, uv.y));
+      p.x *= 1.0 + breath * 0.01 * chest;
+      float body = smoothstep(0.05, 0.55, uv.y);
+      p.x += sin(t * 0.65) * 0.035 * body;
+      p.y += breath * 0.012 * smoothstep(0.4, 0.85, uv.y);
+      // cabeça: inclina, acena e olha na direção do mouse
+      float head = smoothstep(0.785, 0.815, uv.y);
+      float tilt = sin(t * 0.8) * 0.035 + uLook.x * 0.05;
+      p.xy = rot(p.xy, vec2(0.5, 0.8), tilt, head);
+      p.x += uLook.x * 0.025 * head;
+      p.y += (sin(t * 1.6) * 0.008 - uLook.y * 0.012 + uPower * 0.03) * head;
+      // volume bem leve (evita esconder as orelhas quando a câmera gira)
+      p.z += texture2D(uDepth, uv).r * 0.06;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
     }`,
   fragmentShader: /* glsl */`
-    uniform sampler2D uMap; uniform sampler2D uDepth; uniform float uTime; uniform float uFire; uniform float uIntro;
-    varying vec2 vUv; varying float vD;
+    uniform sampler2D uMap; uniform sampler2D uDepth; uniform float uTime; uniform float uFire; uniform float uIntro; uniform float uBlink;
+    varying vec2 vUv;
     ${NOISE}
+    // piscar: fecha o olho puxando a pele de baixo e desenha os cílios
+    vec4 eye(vec2 uv, vec2 c, vec4 col){
+      vec2 q = (uv - c) / vec2(0.034, 0.011);
+      float inside = step(length(q), 1.0) * uBlink;
+      if (inside > 0.0) {
+        col = texture2D(uMap, vec2(uv.x, c.y - 0.016));
+        float lash = 1.0 - smoothstep(0.0, 0.18, abs(q.y + 0.25 * q.x * q.x - 0.15));
+        col.rgb = mix(col.rgb, vec3(0.12, 0.08, 0.07), lash * step(abs(q.x), 0.95));
+      }
+      return col;
+    }
     void main(){
       vec4 tex = texture2D(uMap, vUv);
+      tex = eye(vUv, vec2(0.449, 0.884), tex);
+      tex = eye(vUv, vec2(0.553, 0.884), tex);
       if (tex.a < 0.03) discard;
       vec3 col = tex.rgb;
-      // ambientação: sombra fria de cima, luz de fogo quente vindo de baixo e dos lados
-      col *= mix(0.82, 1.0, smoothstep(0.0, 0.6, vUv.y));
+      // ambientação: sombra fria de cima, luz de fogo quente de baixo e contorno laranja
+      col *= mix(0.84, 1.0, smoothstep(0.0, 0.6, vUv.y));
       float flick = 0.75 + 0.25 * fbm(vec2(uTime * 2.3, vUv.y * 3.0));
-      col += vec3(1.0, 0.42, 0.08) * (1.0 - vUv.y) * 0.1 * uFire * flick;
-      float dpx = texture2D(uDepth, vUv).r; // por pixel (contorno liso)
-      float rim = (1.0 - smoothstep(0.12, 0.4, dpx)) * smoothstep(0.3, 0.9, tex.a);
-      col += vec3(1.0, 0.5, 0.12) * rim * 0.75 * uFire * flick;
+      col += vec3(1.0, 0.42, 0.08) * (1.0 - vUv.y) * 0.09 * uFire * flick;
+      float dpx = texture2D(uDepth, vUv).r;
+      float rim = (1.0 - smoothstep(0.12, 0.4, dpx)) * smoothstep(0.4, 0.95, tex.a);
+      col += vec3(1.0, 0.5, 0.12) * rim * 0.4 * uFire * flick;
       // entrada: materializa de baixo para cima com uma linha de chakra
       float reveal = uIntro * 1.2 - 0.1;
       if (vUv.y > reveal + 0.02) discard;
@@ -188,7 +226,7 @@ export function createScene(canvas, { mode = 'landing', onReady, image = HERO_CH
   const hero = new THREE.Group();
   hero.position.y = FLOOR + CH / 2 - 0.02;
   rig.add(hero);
-  const charMat = charMaterial(mapTex, depthTex);
+  const charMat = charMaterial(mapTex, depthTex, new THREE.Vector2(CW, CH));
   const character = new THREE.Mesh(new THREE.PlaneGeometry(CW, CH, 120, 260), charMat);
   character.renderOrder = 1;
   const auraMat = auraMaterial(glowTex);
@@ -300,7 +338,7 @@ export function createScene(canvas, { mode = 'landing', onReady, image = HERO_CH
   const pose = { x: 0, y: 0, z: 0, rotY: 0, rotX: 0, scale: 1, camY: 0.2 };
   const target = { ...pose };
   const mouse = new THREE.Vector2(), mouseS = new THREE.Vector2();
-  let fire = 1, fireTarget = 1, boost = 3, wiggle = 0;
+  let fire = 1, fireTarget = 1, boost = 3, wiggle = 0, power = 0, powerTarget = 0, nextBlink = 2.5, blinkT = -1;
 
   addEventListener('pointermove', (e) => mouse.set((e.clientX / innerWidth) * 2 - 1, (e.clientY / innerHeight) * 2 - 1), { passive: true });
   addEventListener('deviceorientation', (e) => {
@@ -341,13 +379,19 @@ export function createScene(canvas, { mode = 'landing', onReady, image = HERO_CH
     rig.position.set(pose.x, pose.y, pose.z);
     rig.rotation.set(pose.rotX * 0.5 + Math.sin(t * 0.27) * 0.04 + mouseS.y * 0.1, tiltY, 0);
     rig.scale.setScalar(pose.scale * (0.92 + 0.08 * intro));
-    hero.rotation.y = -tiltY * 0.35; // personagem acompanha a câmera (não fica de lado demais)
+    hero.rotation.y = -tiltY * 0.8; // personagem sempre quase de frente para a câmera
     hero.rotation.z = Math.sin(t * 0.9) * 0.006;
     camera.position.set(mouseS.x * 0.3 + Math.sin(t * 0.21) * 0.25, pose.camY - mouseS.y * 0.15, baseZ + Math.sin(t * 0.18) * 0.3 + (1 - intro) * 1.4);
     camera.lookAt(pose.x * 0.35, pose.y * 0.5 + 0.05, 0);
 
     const f = fire * (0.4 + 0.6 * intro);
+    power += (powerTarget - power) * (1 - Math.pow(0.02, dt));
+    if (t > nextBlink) { blinkT = 0; nextBlink = t + 2.5 + Math.random() * 3.5; }
+    let blink = 0;
+    if (blinkT >= 0) { blinkT += dt; blink = blinkT < 0.14 ? 1 : 0; if (blinkT > 0.14) blinkT = -1; }
     charMat.uniforms.uTime.value = t; charMat.uniforms.uFire.value = f; charMat.uniforms.uIntro.value = intro;
+    charMat.uniforms.uPower.value = power; charMat.uniforms.uBlink.value = reduced ? 0 : blink;
+    charMat.uniforms.uLook.value.copy(mouseS);
     auraMat.uniforms.uTime.value = t; auraMat.uniforms.uFire.value = f * intro;
     beam.material.uniforms.uTime.value = t;
     fireLight.intensity = 8 + f * 6 + Math.sin(t * 9) * 1.5;
@@ -380,7 +424,7 @@ export function createScene(canvas, { mode = 'landing', onReady, image = HERO_CH
   return {
     setPose(p) { Object.assign(target, p); },
     setAura(strength) { fireTarget = 0.6 + strength * 0.8; },
-    spin() { fireTarget = 2.4; boost = 5; wiggle = 1; setTimeout(() => (fireTarget = 1), 1000); },
+    spin() { fireTarget = 2.4; boost = 5; wiggle = 1; powerTarget = 1; setTimeout(() => { fireTarget = 1; powerTarget = 0; }, 1300); },
     pulse() { target.scale = pose.scale * 1.04; fireTarget = 1.7; boost = 2.5; setTimeout(() => { target.scale /= 1.04; fireTarget = 1; }, 260); },
   };
 }
