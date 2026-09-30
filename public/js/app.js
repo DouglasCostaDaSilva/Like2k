@@ -161,7 +161,7 @@ const sendRow = (s, withUser = false) => `<tr>
   <td class="mono">${esc(s.targetId)}</td>
   <td>${esc(s.nickname || '—')}</td>
   <td class="num">${int(s.status === 'success' ? s.likesSent : s.amount)}</td>
-  <td>${pill(s.status)}${s.error ? `<span class="err-text">${esc(s.error)}</span>` : ''}</td>
+  <td>${pill(s.status)}${s.error ? `<span class="err-text" title="${esc(s.error)}">${esc(s.error)}</span>` : ''}</td>
 </tr>`;
 const SEND_HEAD = ['Data', 'ID', 'Nick', 'Likes', 'Status'];
 
@@ -219,6 +219,16 @@ $('#sChips').addEventListener('click', (e) => {
   if (c) { sAmount.value = Math.min(Number(c.dataset.n), sendMax()); renderSend(); }
 });
 
+function renderPlayer() {
+  const p = state.player;
+  const left = p.dailyLimit - p.usedToday;
+  const box = $('#sPlayer');
+  box.innerHTML = `<div class="pic">${esc((p.nickname || '?')[0]).toUpperCase()}</div>
+    <div><strong>${esc(p.nickname || 'Jogador')}</strong><span>${esc(p.region || '—')}${p.level ? ` · nível ${p.level}` : ''}${p.liked != null ? ` · ${int(p.liked)} likes no perfil` : ''}</span></div>
+    <div class="left"><strong class="${left ? '' : 'err-text'}">${int(left)}</strong><span>restantes hoje</span></div>`;
+  box.classList.add('show');
+}
+
 async function checkPlayer() {
   const uid = sId.value;
   if (!/^\d{5,15}$/.test(uid)) { alertBox($('#sMsg'), 'Digite um ID válido (somente números).'); return null; }
@@ -226,14 +236,8 @@ async function checkPlayer() {
   busy(btn, true);
   alertBox($('#sMsg'));
   try {
-    const p = await api(`/api/player/${uid}`);
-    state.player = p;
-    const left = p.dailyLimit - p.usedToday;
-    const box = $('#sPlayer');
-    box.innerHTML = `<div class="pic">${esc((p.nickname || '?')[0]).toUpperCase()}</div>
-      <div><strong>${esc(p.nickname || 'Jogador')}</strong><span>${esc(p.region || '—')}${p.level ? ` · nível ${p.level}` : ''}${p.liked != null ? ` · ${int(p.liked)} likes no perfil` : ''}</span></div>
-      <div class="left"><strong class="${left ? '' : 'err-text'}">${int(left)}</strong><span>restantes hoje</span></div>`;
-    box.classList.add('show');
+    state.player = await api(`/api/player/${uid}`);
+    renderPlayer();
     scene?.pulse();
     renderSend();
     return p;
@@ -264,7 +268,7 @@ $('#sendForm').addEventListener('submit', async (e) => {
       try {
         const r = await api('/api/send', { method: 'POST', body: { target_id: uid, amount } });
         state.me.stock = r.stock;
-        if (state.player?.uid === uid) state.player.usedToday = r.usedToday;
+        if (state.player?.uid === uid) { state.player.usedToday = r.usedToday; renderPlayer(); }
         alertBox($('#sMsg'), `✔ ${int(r.send.likesSent)} likes enviados para ${r.send.nickname || uid}.`, 'ok');
         toast(`${int(r.send.likesSent)} likes enviados!`);
         scene?.pulse();
