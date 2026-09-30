@@ -64,6 +64,9 @@
 .form { display: grid; gap: 16px; }
 .row { display: flex; gap: 10px; }
 .row > .input { flex: 1; min-width: 0; }
+.form > *, .card > * { min-width: 0; }
+.row.wrap { flex-wrap: wrap; }
+.keybox code { overflow-wrap: anywhere; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { height: 34px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line-strong); background: rgba(255, 255, 255, 0.03); cursor: pointer; font-size: 13px; font-weight: 600; }
 .chip:hover, .chip.on { border-color: var(--orange); color: var(--orange-2); background: rgba(255, 106, 13, 0.08); }
@@ -170,7 +173,8 @@ pre.code { margin: 10px 0 12px; padding: 14px; border-radius: 8px; background: r
 @media (max-width: 860px) {
   .shell { grid-template-columns: minmax(0, 1fr); }
   .side { position: fixed; z-index: 50; top: 0; left: 0; margin: 0; height: 100vh; width: 280px; border-radius: 0 18px 18px 0; transform: translateX(-105%); transition: transform 0.35s ease; }
-  .side.open { transform: none; }
+  .side.open { transform: none; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.6), 0 -4px 15px var(--orange-glow); }
+  .side.glass { background: rgba(12, 12, 16, 0.97); }
   .main { padding: 16px 16px 60px; }
   .mobile-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; padding: 10px 10px 10px 16px; border-radius: 16px; }
   .app-shade { background: rgba(4, 4, 6, 0.78); }

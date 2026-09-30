@@ -59,7 +59,7 @@
         </div>
         <div class="card glass" style="margin-top:16px">
           <div class="card-head"><div><h3>Últimos envios</h3><p class="sub">Seus 8 envios mais recentes</p></div><button class="btn btn-sm" data-go="history">Ver tudo</button></div>
-          <div class="table-wrap" id="recentSends"></div>
+          <div class="list" id="recentSends"></div>
         </div>
       </section>
 
@@ -179,7 +179,7 @@
             <h3>Sua API Key</h3>
             <p class="sub">Envie no header <code>X-Api-Key</code> de cada requisição. Não compartilhe: ela identifica tudo que for feito em seu nome.</p>
             <div class="keybox"><code id="kApiKey">—</code></div>
-            <div class="row"><button class="btn btn-sm" type="button" id="kCopy">Copiar</button><button class="btn btn-sm" type="button" id="kShow">Mostrar</button><button class="btn btn-sm btn-danger" type="button" id="kNew">Gerar nova chave</button></div>
+            <div class="row wrap"><button class="btn btn-sm" type="button" id="kCopy">Copiar</button><button class="btn btn-sm" type="button" id="kShow">Mostrar</button><button class="btn btn-sm btn-danger" type="button" id="kNew">Gerar nova chave</button></div>
             <div class="summary">
               <div><span class="muted">Base URL</span><b class="mono" id="kBase"></b></div>
               <div><span class="muted">Formato</span><b>application/json</b></div>

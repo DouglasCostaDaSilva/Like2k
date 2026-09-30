@@ -82,6 +82,10 @@ document.addEventListener('click', (e) => {
   if (t) { e.preventDefault(); go(t.dataset.go); }
 });
 $('#menuToggle').addEventListener('click', () => $('#side').classList.toggle('open'));
+document.addEventListener('click', (e) => { // toque fora fecha o menu no celular
+  const side = $('#side');
+  if (side.classList.contains('open') && !side.contains(e.target) && !e.target.closest('#menuToggle')) side.classList.remove('open');
+});
 $('#logout').addEventListener('click', async () => { await api('/api/auth/logout', { method: 'POST' }).catch(() => {}); location.href = '/'; });
 addEventListener('resize', () => applyPose(current));
 
@@ -198,7 +202,7 @@ LOADERS.dashboard = async () => {
   await loadMe();
   renderStockKpis();
   const { sends } = await api('/api/sends');
-  $('#recentSends').innerHTML = table(SEND_HEAD, sends.slice(0, 8).map((s) => sendRow(s)), 'Você ainda não fez envios. <a href="#send" data-go="send" class="grad">Enviar agora →</a>');
+  $('#recentSends').innerHTML = sends.length ? sends.slice(0, 8).map(sendItem).join('') : '<div class="empty">Você ainda não fez envios. <a href="#send" data-go="send" class="grad">Enviar agora →</a></div>';
 };
 
 let hSource = '';
@@ -405,7 +409,7 @@ async function loadSendRecent() {
     $('#sRecent').innerHTML = table(['Data', 'Usuário', ...SEND_HEAD.slice(1)], sends.slice(0, 10).map((s) => sendRow(s, true)));
   } else {
     const { sends } = await api('/api/sends');
-    $('#sRecent').innerHTML = table(SEND_HEAD, sends.slice(0, 10).map((s) => sendRow(s)));
+    $('#sRecent').innerHTML = sends.length ? `<div class="list">${sends.slice(0, 10).map(sendItem).join('')}</div>` : '<div class="empty">Nenhum envio ainda.</div>';
   }
 }
 
