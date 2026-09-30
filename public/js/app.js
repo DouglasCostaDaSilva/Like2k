@@ -240,7 +240,7 @@ async function checkPlayer() {
     renderPlayer();
     scene?.pulse();
     renderSend();
-    return p;
+    return state.player;
   } catch (err) {
     alertBox($('#sMsg'), err.message);
     return null;
@@ -271,7 +271,7 @@ $('#sendForm').addEventListener('submit', async (e) => {
         if (state.player?.uid === uid) { state.player.usedToday = r.usedToday; renderPlayer(); }
         alertBox($('#sMsg'), `✔ ${int(r.send.likesSent)} likes enviados para ${r.send.nickname || uid}.`, 'ok');
         toast(`${int(r.send.likesSent)} likes enviados!`);
-        scene?.pulse();
+        scene?.spin();
       } catch (err) {
         if (err.data?.stock != null) state.me.stock = err.data.stock;
         alertBox($('#sMsg'), err.message);

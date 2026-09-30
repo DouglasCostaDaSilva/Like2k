@@ -8,15 +8,16 @@
   --text: #f4f1ec;
   --muted: #9b98a8;
   --dim: #6c6a78;
-  --orange: #ff6a0d;
-  --orange-2: #ffae42;
+  --orange: #ff7700;
+  --orange-glow: rgba(255, 119, 0, 0.6);
+  --orange-2: #ffae00;
   --blue: #3b8bff;
   --red: #ff4545;
   --green: #2fd180;
-  --radius: 18px;
+  --radius: 12px;
   --shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.8);
-  --font-display: 'Unbounded', system-ui, sans-serif;
-  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
+  --font: 'Rajdhani', 'Segoe UI', system-ui, -apple-system, sans-serif;
   color-scheme: dark;
 }
 
@@ -151,7 +152,7 @@ main.landing { position: relative; z-index: 5; }
 
 .hero-copy { max-width: 600px; }
 .hero { position: relative; }
-.hero h1 { font-size: clamp(46px, 7.4vw, 104px); margin: 22px 0 22px; }
+.hero h1 { font-size: clamp(38px, 6.2vw, 90px); margin: 22px 0 22px; }
 .hero h1 .thin { display: block; font-weight: 300; font-size: 0.34em; letter-spacing: 0.3em; color: var(--muted); margin-bottom: 12px; }
 .hero p.lead { font-size: clamp(16px, 1.6vw, 19px); color: #c9c6d2; max-width: 520px; }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 34px; }
@@ -207,6 +208,61 @@ footer.foot .wrap { display: flex; justify-content: space-between; flex-wrap: wr
 
 .reveal { opacity: 0; transform: translateY(40px); transition: opacity 1s cubic-bezier(0.2, 0.7, 0.1, 1), transform 1s cubic-bezier(0.2, 0.7, 0.1, 1); }
 .reveal.in { opacity: 1; transform: none; }
+
+
+/* =====================================================================
+   TEMA FF x SHINOBI — HUD gamer: Orbitron, bordas neon laranja, scanlines
+   ===================================================================== */
+body { font-size: 16px; font-weight: 500; }
+h1, h2, .display { font-weight: 900; font-style: italic; text-transform: uppercase; letter-spacing: 0.01em; }
+h3 { letter-spacing: 0.02em; }
+.scanlines {
+  position: fixed; inset: 0; pointer-events: none; z-index: 3; opacity: 0.3;
+  background: linear-gradient(to bottom, transparent 50%, rgba(0, 0, 0, 0.1) 50%);
+  background-size: 100% 4px;
+}
+.glass {
+  border: 1px solid rgba(255, 119, 0, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(255, 119, 0, 0.1);
+  /* cantos de HUD */
+  background:
+    linear-gradient(var(--orange), var(--orange)) right 8px top 8px / 16px 2px no-repeat,
+    linear-gradient(var(--orange), var(--orange)) right 8px top 8px / 2px 16px no-repeat,
+    linear-gradient(var(--orange), var(--orange)) left 8px bottom 8px / 16px 2px no-repeat,
+    linear-gradient(var(--orange), var(--orange)) left 8px bottom 8px / 2px 16px no-repeat,
+    var(--glass);
+}
+.nav.glass { background: var(--glass); }
+.nav, .auth-card, .price-card, .side, .modal .box {
+  border-top: 3px solid var(--orange);
+  box-shadow: 0 -4px 15px var(--orange-glow), 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(255, 119, 0, 0.1);
+}
+.step, .stat-chip, .kpi { border-left: 3px solid var(--orange); }
+.nav { border-radius: var(--radius); }
+.logo { font-style: italic; font-weight: 900; }
+.logo b { font-weight: 900; }
+.grad {
+  background: linear-gradient(90deg, #fff, var(--orange-2) 55%, var(--orange));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 10px rgba(255, 119, 0, 0.45));
+}
+.btn { border-radius: 4px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; font-size: 14px; }
+.btn-primary {
+  color: #fff; border-radius: 0; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  background: linear-gradient(45deg, transparent 5%, #f06a00 5%, var(--orange) 60%, #ff8a1f);
+  box-shadow: 6px 0 0 #000;
+}
+.btn-primary:hover { filter: brightness(1.15); box-shadow: 6px 0 0 #000, 0 0 26px var(--orange-glow); }
+.btn-primary:active { box-shadow: 2px 0 0 #000; transform: translateX(4px); }
+.input { border-radius: 8px; font-weight: 600; }
+.pill { border-radius: 4px; }
+.stat-chip strong { font-style: italic; }
+.step .n { font-style: italic; font-weight: 900; }
+.price-card .grad { font-style: italic; }
+.eyebrow { font-weight: 700; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); }
+::-webkit-scrollbar-thumb { background: var(--orange); border-radius: 10px; }
 
 @media (max-width: 860px) {
   .nav-links a:not(.btn) { display: none; }

@@ -115,6 +115,23 @@ td .actions { display: flex; gap: 6px; }
 
 .spinner { width: 16px; height: 16px; border: 2px solid rgba(0, 0, 0, 0.25); border-top-color: currentColor; border-radius: 50%; animation: spin 0.7s linear infinite; }
 
+/* tema FF x Shinobi no painel */
+.card h3 { font-family: var(--font-display); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--orange); }
+.card-head { padding-bottom: 12px; border-bottom: 1px solid rgba(255, 119, 0, 0.3); }
+.kpi .value {
+  font-weight: 900; font-style: italic;
+  background: linear-gradient(90deg, #fff, var(--orange-2)); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 10px rgba(255, 119, 0, 0.45));
+}
+.kpi .label, th { color: #ffb366; }
+.menu button { font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; font-size: 14px; border-radius: 6px; }
+.menu button.on { background: linear-gradient(90deg, rgba(255, 119, 0, 0.28), rgba(255, 119, 0, 0.02)); }
+.avatar { border-radius: 50%; border: 2px solid var(--orange-2); box-shadow: 0 0 15px rgba(255, 119, 0, 0.8); }
+.player .pic { border-radius: 50%; border: 2px solid #6fa8ff; }
+.chip { border-radius: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+.summary, .pix { border-radius: 8px; }
+.toast { border-radius: 8px; border-left: 3px solid var(--orange); }
+
 @media (max-width: 1080px) {
   .two, .two.side-form { grid-template-columns: minmax(0, 1fr); }
 }
