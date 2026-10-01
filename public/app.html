@@ -23,19 +23,20 @@
 
     <main class="main">
       <div class="mobilebar"><span class="brand" data-logo>Zyropay</span><button class="btn btn-sm" id="menuBtn" aria-label="Abrir menu">Menu</button></div>
-      <div class="banner hidden" id="mockBanner">Modo de teste: o provedor PIX é simulado. Use “Simular pagamento” para testar o fluxo completo.</div>
+      <div class="banner hidden" id="mockBanner">Modo de teste: o Mercado Pago é simulado (a conexão e os PIX não são reais). Use “Simular pagamento” para testar o fluxo completo.</div>
 
       <!-- ===================== LOJISTA: INÍCIO ===================== -->
       <section class="view" data-view="home">
-        <div class="topbar"><div><h1 id="hello">Olá</h1><p>Resumo dos seus recebimentos.</p></div></div>
+        <div class="topbar"><div><h1 id="hello">Olá</h1><p>Resumo dos seus recebimentos. O PIX cai direto na sua conta Mercado Pago.</p></div></div>
         <div class="grid">
+          <div class="banner hidden" id="mpBanner" style="display:none"><span id="mpBannerText"></span> <button class="btn btn-sm btn-primary" data-go="integration" style="margin-left:8px">Conectar agora</button></div>
           <div class="card balance">
-            <div><div class="label">Saldo disponível</div><div class="big" id="hBalance">R$ 0,00</div><div class="sub" id="hBalanceSub"></div></div>
-            <div class="actions" style="display:flex;gap:10px"><button class="btn btn-primary" data-new-charge>Nova cobrança</button><button class="btn" data-go="withdrawals">Sacar</button></div>
+            <div><div class="label">Recebido nos últimos 30 dias</div><div class="big" id="hBalance">R$ 0,00</div><div class="sub" id="hBalanceSub"></div></div>
+            <div class="actions" style="display:flex;gap:10px"><button class="btn btn-primary" data-new-charge>Nova cobrança</button><a class="btn" href="/api/merchant/export.csv?days=30" download>Exportar CSV</a></div>
           </div>
           <div class="grid kpis">
             <div class="card kpi"><div class="label">Recebido hoje</div><div class="value" id="hToday">—</div><div class="sub" id="hTodayCount"></div></div>
-            <div class="card kpi"><div class="label">Total recebido</div><div class="value" id="hGross">—</div><div class="sub">desde o início</div></div>
+            <div class="card kpi"><div class="label">Total recebido (bruto)</div><div class="value" id="hGross">—</div><div class="sub">desde o início</div></div>
             <div class="card kpi"><div class="label">Conversão</div><div class="value" id="hConv">—</div><div class="sub">cobranças pagas / finalizadas</div></div>
             <div class="card kpi"><div class="label">Sua taxa</div><div class="value" id="hFee">—</div><div class="sub" id="hFeeMin"></div></div>
           </div>
@@ -59,29 +60,18 @@
         </div>
       </section>
 
-      <!-- ===================== LOJISTA: SAQUES ===================== -->
-      <section class="view" data-view="withdrawals">
-        <div class="topbar"><div><h1>Saques</h1><p>Transfira seu saldo para qualquer chave PIX. Saques são analisados e pagos em até 1 dia útil.</p></div></div>
-        <div class="grid g-side">
-          <div class="card">
-            <div class="card-head"><h3>Histórico de saques</h3></div>
-            <div class="row head cols-wd"><span>Destino</span><span class="hide-sm">Pedido em</span><span>Status</span><span style="text-align:right">Valor</span></div>
-            <div class="list" id="wList"></div>
-          </div>
-          <form class="card card-pad form" id="wForm">
-            <h3 style="font-size:17px">Novo saque</h3>
-            <div class="kv"><div><span>Disponível para saque</span><b id="wAvail">—</b></div><div><span>Em análise</span><b id="wPending">—</b></div></div>
-            <div class="field"><label for="wAmount">Valor</label><div class="input-money"><span>R$</span><input class="input num" id="wAmount" inputmode="numeric" placeholder="0,00" required /></div><span class="hint">Mínimo de R$ 10,00. <button type="button" class="btn-ghost" id="wAll" style="border:0;background:none;color:var(--accent-2);font-weight:700;cursor:pointer;padding:0">Sacar tudo</button></span></div>
-            <div class="field"><label for="wKey">Chave PIX de destino</label><input class="input" id="wKey" placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória" required /></div>
-            <div class="alert" id="wMsg"></div>
-            <button class="btn btn-primary btn-block" type="submit">Solicitar saque</button>
-          </form>
-        </div>
-      </section>
-
       <!-- ===================== LOJISTA: INTEGRAÇÃO ===================== -->
       <section class="view" data-view="integration">
         <div class="topbar"><div><h1>Integração</h1><p>Credenciais da API, webhooks e o que o seu sistema precisa para cobrar automaticamente.</p></div><div class="actions"><a class="btn" href="/docs" target="_blank" rel="noopener">Documentação da API</a></div></div>
+        <div class="card card-pad" id="mpCard" style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start">
+            <div style="min-width:0;flex:1 1 320px"><h3 style="font-size:17px">Conta Mercado Pago</h3><p class="muted" style="font-size:14px;margin-top:4px" id="mpText"></p></div>
+            <div id="mpStatus"></div>
+          </div>
+          <div class="kv hidden" id="mpMeta" style="margin-top:14px"></div>
+          <div class="alert" id="mpMsg" style="margin-top:12px"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn btn-primary" id="mpConnect" type="button">Conectar Mercado Pago</button><button class="btn btn-ghost hidden" id="mpDisconnect" type="button">Desconectar</button></div>
+        </div>
         <div class="grid g-2">
           <div class="card card-pad form" id="credCard">
             <div><h3 style="font-size:17px">Credenciais da API</h3><p class="muted" style="font-size:14px;margin-top:4px">Duas credenciais, sempre juntas: o <b>Client ID</b> identifica a sua conta e o <b>Client Secret</b> prova que é você. Envie as duas em toda requisição (<a href="/docs#autenticacao" target="_blank" rel="noopener" style="color:var(--accent-2)">como autenticar</a>).</p></div>
@@ -92,7 +82,7 @@
             <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" id="cRegen" type="button">Gerar novas credenciais</button><button class="btn btn-ghost" id="cRevoke" type="button">Revogar segredo</button></div>
           </div>
           <form class="card card-pad form" id="hookForm">
-            <div><h3 style="font-size:17px">Webhook</h3><p class="muted" style="font-size:14px;margin-top:4px">Avisamos seu sistema por POST quando uma cobrança é criada, paga, expira ou é cancelada, e quando um saque muda de status.</p></div>
+            <div><h3 style="font-size:17px">Webhook</h3><p class="muted" style="font-size:14px;margin-top:4px">Avisamos seu sistema por POST quando uma cobrança é criada, paga, expira ou é cancelada ou devolvida.</p></div>
             <div class="field"><label for="iUrl">URL que recebe os avisos</label><input class="input" id="iUrl" placeholder="https://seusite.com/webhooks/zyropay" /></div>
             <div class="field"><label>Segredo de assinatura</label><div class="secret"><code id="iSecret">whsec_••••••••••••••••</code><button class="btn btn-sm" id="iSecretShow" type="button">Mostrar</button></div><span class="hint">Valide o header <span class="mono">Zyropay-Signature</span> com este segredo.</span></div>
             <div class="alert" id="iMsg"></div>
@@ -108,13 +98,13 @@
 
       <!-- ===================== LOJISTA: CONTA ===================== -->
       <section class="view" data-view="account">
-        <div class="topbar"><div><h1>Conta</h1><p>Seus dados, chave PIX padrão e senha.</p></div></div>
+        <div class="topbar"><div><h1>Conta</h1><p>Seus dados e senha.</p></div></div>
         <div class="grid g-2">
           <form class="card card-pad form" id="accForm">
             <h3 style="font-size:17px">Dados</h3>
             <div class="field"><label for="aName">Nome exibido no checkout</label><input class="input" id="aName" required /></div>
             <div class="two"><div class="field"><label>E-mail</label><input class="input" id="aEmail" disabled /></div><div class="field"><label>CPF / CNPJ</label><input class="input mono" id="aDoc" disabled /></div></div>
-            <div class="two"><div class="field"><label for="aPhone">WhatsApp</label><input class="input" id="aPhone" /></div><div class="field"><label for="aPix">Chave PIX padrão para saques</label><input class="input" id="aPix" /></div></div>
+            <div class="field"><label for="aPhone">WhatsApp</label><input class="input" id="aPhone" /></div>
             <div class="alert" id="aMsg"></div>
             <div><button class="btn btn-primary" type="submit">Salvar dados</button></div>
           </form>
@@ -136,7 +126,7 @@
           <div class="grid kpis">
             <div class="card kpi"><div class="label">Volume processado</div><div class="value" id="adTpv">—</div><div class="sub">total de PIX pagos</div></div>
             <div class="card kpi"><div class="label">Receita de taxas</div><div class="value" id="adRev">—</div><div class="sub" id="adRevToday"></div></div>
-            <div class="card kpi"><div class="label">Devido aos lojistas</div><div class="value" id="adOwed">—</div><div class="sub">saldo + saques em análise</div></div>
+            <div class="card kpi"><div class="label">Mercado Pago conectado</div><div class="value" id="adOwed">—</div><div class="sub">lojistas aptos a cobrar</div></div>
             <div class="card kpi"><div class="label">Lojistas ativos</div><div class="value" id="adMerch">—</div><div class="sub" id="adMerchSub"></div></div>
           </div>
           <div class="card"><div class="card-head"><div><h3>Volume processado nos últimos 14 dias</h3><p id="adChartSub"></p></div></div><div class="chart" id="adChart"></div></div>
@@ -145,10 +135,10 @@
 
       <!-- ===================== ADMIN: LOJISTAS ===================== -->
       <section class="view" data-view="admin-merchants">
-        <div class="topbar"><div><h1>Lojistas</h1><p>Aprove cadastros, ajuste taxas e bloqueie contas.</p></div></div>
+        <div class="topbar"><div><h1>Lojistas</h1><p>Aprove cadastros, ajuste taxas e bloqueie contas. O dinheiro dos PIX cai direto na conta Mercado Pago de cada lojista.</p></div></div>
         <div class="card">
           <div class="filters"><div class="seg" id="mStatus"><button class="on" data-s="">Todos</button><button data-s="pending">Em análise</button><button data-s="active">Ativos</button><button data-s="blocked">Bloqueados</button></div></div>
-          <div class="row head cols-merch"><span>Lojista</span><span>Status</span><span class="hide-sm">Taxa</span><span style="text-align:right">Saldo</span><span></span></div>
+          <div class="row head cols-merch"><span>Lojista</span><span>Status</span><span class="hide-sm">Taxa</span><span style="text-align:right">Recebido</span><span></span></div>
           <div class="list" id="mList"></div>
         </div>
       </section>
@@ -163,15 +153,6 @@
         </div>
       </section>
 
-      <!-- ===================== ADMIN: SAQUES ===================== -->
-      <section class="view" data-view="admin-withdrawals">
-        <div class="topbar"><div><h1>Saques</h1><p>Faça o PIX para a chave do lojista no seu banco e marque como pago.</p></div></div>
-        <div class="card">
-          <div class="filters"><div class="seg" id="awStatus"><button data-s="">Todos</button><button class="on" data-s="pending">Em análise</button><button data-s="paid">Pagos</button><button data-s="rejected">Recusados</button></div></div>
-          <div class="row head cols-wd-admin"><span>Lojista</span><span class="hide-sm">Chave PIX</span><span style="text-align:right">Valor</span><span>Status</span><span></span></div>
-          <div class="list" id="awList"></div>
-        </div>
-      </section>
     </main>
   </div>
 

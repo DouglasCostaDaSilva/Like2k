@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Zyropay · Gateway de pagamentos PIX</title>
-  <meta name="description" content="Zyropay: gateway de pagamentos PIX com checkout pronto, API REST com Client ID e Client Secret, webhooks assinados e saque. 2% por PIX pago, mínimo R$ 0,30, sem mensalidade." />
+  <title>Zyropay · API e checkout PIX para o seu Mercado Pago</title>
+  <meta name="description" content="Zyropay: API, checkout e painel para cobrar por PIX na sua conta Mercado Pago. Client ID e Client Secret, webhooks assinados. 2% por PIX pago, mínimo R$ 0,30, sem mensalidade." />
   <meta name="theme-color" content="#08080b" />
   <meta property="og:title" content="Zyropay · Gateway de pagamentos PIX" />
   <meta property="og:description" content="Receba PIX na hora. API com credenciais em duas partes, webhooks assinados e checkout pronto. 2% por PIX pago." />
@@ -187,6 +187,17 @@
     .cmp tr:last-child td { border-bottom: 0; }
     .yes { color: var(--good); font-weight: 800; } .no { color: var(--muted); }
 
+    .split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .splitcard { padding: 28px; }
+    .splitcard small { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+    .splitcard.us { border-color: rgba(139, 124, 255, 0.4); background: linear-gradient(180deg, rgba(139, 124, 255, 0.08), var(--surface)); }
+    .splitcard.us small { color: var(--accent-2); }
+    .splitcard h3 { font-size: 20px; margin: 10px 0 16px; font-family: var(--body); font-weight: 750; letter-spacing: 0; }
+    .splitcard ul { list-style: none; display: grid; gap: 11px; }
+    .splitcard li { display: flex; gap: 10px; color: var(--text-2); font-size: 14.5px; }
+    .splitcard li::before { content: '✓'; color: var(--good); font-weight: 800; }
+    .splitcard:not(.us) li::before { color: var(--muted); }
+
     /* ---------- faq / final ---------- */
     .faq-wrap { display: grid; grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr); gap: 48px; }
     .final { text-align: center; padding: 96px 0; border-top: 1px solid var(--line); position: relative; overflow: hidden; }
@@ -218,7 +229,7 @@
       .flow .node:not(:last-child)::after { display: none; }
     }
     @media (max-width: 640px) {
-      .grid-feat, .cases, .sec, .creds { grid-template-columns: minmax(0, 1fr); }
+      .grid-feat, .cases, .sec, .creds, .split { grid-template-columns: minmax(0, 1fr); }
       .kpis { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
       .kpis .kpi:last-child { grid-column: 1 / -1; }
       .hook { display: none; }
@@ -254,7 +265,7 @@
         <div>
           <span class="eyebrow"><i></i>PIX confirmado em segundos</span>
           <h1>Receba PIX na hora.<br /><em>Pague só 2%.</em></h1>
-          <p class="lead">O gateway PIX para quem vende online: cobrança pelo painel ou pela API, checkout pronto, aviso automático no seu sistema e saque quando quiser.</p>
+          <p class="lead">A camada de produto para o seu Mercado Pago: cobrança pelo painel ou pela API, checkout pronto e aviso automático no seu sistema. O PIX cai direto na sua conta.</p>
           <div class="cta">
             <a href="/cadastro" class="btn btn-primary btn-lg">Criar conta grátis</a>
             <a href="/docs" class="btn btn-lg">Ver a documentação</a>
@@ -290,7 +301,7 @@
         <div class="it"><strong>2% · mín. R$ 0,30</strong><span>Só quando a venda acontece</span></div>
         <div class="it"><strong>API + Webhooks</strong><span>Integre em poucas linhas</span></div>
         <div class="it"><strong>Client ID + Secret</strong><span>Credenciais que você mesmo troca</span></div>
-        <div class="it"><strong>Via Mercado Pago</strong><span>Processamento do PIX</span></div>
+        <div class="it"><strong>Direto na sua conta</strong><span>O PIX cai no seu Mercado Pago</span></div>
       </div>
     </div>
 
@@ -301,13 +312,13 @@
         <div class="grid-feat">
           <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 14h3v3M21 14v.01M14 21h.01M17.5 21H21v-3.5"/></svg></div><h3>Checkout pronto</h3><p>Cada cobrança tem uma página própria com QR Code, copia e cola, contagem regressiva e confirmação automática. Basta mandar o link.</p></div>
           <div class="card feat hl reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.7-8.7M16 7l3 3M14 9l2 2"/></svg></div><h3>Credenciais em duas partes</h3><p>Client ID público e Client Secret privado. Geradas automaticamente, trocadas por você quando quiser, com período de transição.</p></div>
-          <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m8 8-5 4 5 4M16 8l5 4-5 4M14 5l-4 14"/></svg></div><h3>API REST simples</h3><p>Crie, consulte, liste e cancele cobranças; veja saldo e peça saques. JSON, valores em centavos e erros com código estável.</p></div>
+          <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m8 8-5 4 5 4M16 8l5 4-5 4M14 5l-4 14"/></svg></div><h3>API REST simples</h3><p>Crie, consulte, liste, cancele e devolva cobranças; veja o resumo do período. JSON, valores em centavos e erros com código estável.</p></div>
           <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg></div><h3>Webhooks assinados</h3><p>Seu sistema recebe <span class="mono">charge.paid</span> na hora, com assinatura HMAC-SHA256 e até 6 tentativas se ele estiver fora do ar.</p></div>
-          <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg></div><h3>Painel completo</h3><p>Saldo, vendas do dia, gráfico dos últimos 14 dias, busca por cobrança, histórico de webhooks e saques em um só lugar.</p></div>
-          <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></div><h3>Saque para sua chave PIX</h3><p>Peça o saque no painel ou pela API para qualquer chave PIX. Acompanhe o status e receba aviso quando for pago.</p></div>
+          <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg></div><h3>Painel completo</h3><p>Recebido, taxas, vendas do dia, gráfico dos últimos 14 dias, busca por cobrança, histórico de webhooks e exportação CSV para conciliar.</p></div>
+          <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></div><h3>Dinheiro na sua conta</h3><p>Você conecta o seu Mercado Pago em um clique e o PIX cai direto nele. O Zyropay nunca segura o seu dinheiro, então não existe saque nem saldo parado.</p></div>
           <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg></div><h3>Idempotência</h3><p>Reenvie a mesma requisição com <span class="mono">Idempotency-Key</span> e nunca crie a mesma cobrança duas vezes, mesmo com falha de rede.</p></div>
           <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8ZM7.5 7.5h.01"/></svg></div><h3>Seu código de pedido</h3><p>Mande <span class="mono">external_id</span> com o número do pedido e consulte a cobrança por ele, sem guardar nosso identificador.</p></div>
-          <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Zm-3 10 2.5 2.5L15.5 9.5"/></svg></div><h3>Cadastro verificado</h3><p>CPF/CNPJ validado e conta analisada antes de liberar a API, para manter o ambiente limpo para todo mundo.</p></div>
+          <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Zm-3 10 2.5 2.5L15.5 9.5"/></svg></div><h3>Conciliação em CSV</h3><p>Exporte as cobranças do período com valor, taxa e líquido, e cruze com o extrato do Mercado Pago sem planilha manual.</p></div>
         </div>
       </div>
     </section>
@@ -318,15 +329,15 @@
         <div class="head reveal"><span class="kicker">Como funciona</span><h2>Do cadastro ao primeiro PIX em minutos</h2><p>Sem maquininha, sem contrato e sem integração complicada.</p></div>
         <div class="flow reveal" aria-label="Fluxo de um pagamento">
           <div class="node"><div class="ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></div><div><b>Seu sistema</b><span>cria a cobrança</span></div></div>
-          <div class="node"><div class="ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg></div><div><b>Zyropay</b><span>gera QR e link</span></div></div>
+          <div class="node"><div class="ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg></div><div><b>Zyropay</b><span>cria o PIX na sua conta</span></div></div>
           <div class="node"><div class="ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/></svg></div><div><b>Cliente</b><span>paga no app do banco</span></div></div>
-          <div class="node"><div class="ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10 12 4l9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/></svg></div><div><b>Banco</b><span>confirma o PIX</span></div></div>
+          <div class="node"><div class="ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10 12 4l9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/></svg></div><div><b>Seu Mercado Pago</b><span>recebe o PIX</span></div></div>
           <div class="node"><div class="ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/></svg></div><div><b>Webhook</b><span>avisa seu sistema</span></div></div>
         </div>
         <div class="steps">
-          <div class="card step reveal"><span class="n">01</span><h3>Crie a cobrança</h3><p>Digite o valor no painel ou chame <span class="mono">POST /v1/charges</span>. O QR Code, o copia e cola e o link de pagamento saem na hora.</p></div>
+          <div class="card step reveal"><span class="n">01</span><h3>Conecte e cobre</h3><p>Conecte o seu Mercado Pago em um clique. Depois digite o valor no painel ou chame <span class="mono">POST /v1/charges</span>: o QR Code, o copia e cola e o link saem na hora.</p></div>
           <div class="card step reveal"><span class="n">02</span><h3>Seu cliente paga</h3><p>Envie o link por WhatsApp, e-mail ou mostre na tela. A página conta o tempo e confirma sozinha assim que o PIX cai.</p></div>
-          <div class="card step reveal"><span class="n">03</span><h3>Você recebe e saca</h3><p>O valor entra no saldo já com a taxa descontada. Seu sistema é avisado por webhook e você saca para a sua chave PIX.</p></div>
+          <div class="card step reveal"><span class="n">03</span><h3>O dinheiro já é seu</h3><p>O PIX cai direto na sua conta Mercado Pago, com a comissão do Zyropay descontada na origem. Seu sistema é avisado por webhook.</p></div>
         </div>
       </div>
     </section>
@@ -335,11 +346,11 @@
     <section class="block" id="painel">
       <div class="wrap dash-wrap">
         <div class="reveal">
-          <div class="head" style="margin-bottom:0"><span class="kicker">Painel do lojista</span><h2>Seu caixa à vista, sem planilha</h2><p>Acompanhe cada centavo: o que entrou, o que é taxa e o que já pode sacar.</p></div>
+          <div class="head" style="margin-bottom:0"><span class="kicker">Painel do lojista</span><h2>Suas vendas à vista, sem planilha</h2><p>Acompanhe cada centavo: o que entrou, quanto foi de taxa e o que ainda está aguardando.</p></div>
           <ul class="ticks">
-            <li><div><b>Saldo e extrato em tempo real</b>Disponível, em saque e total recebido, sempre atualizados.</div></li>
+            <li><div><b>Recebido e taxas em tempo real</b>Líquido, taxa do Zyropay e total bruto sempre atualizados.</div></li>
             <li><div><b>Gerador de cobranças</b>Valor, descrição e dados do cliente; o link vai direto para a área de transferência.</div></li>
-            <li><div><b>Credenciais e webhooks</b>Gere, copie e troque Client ID e Client Secret, e veja cada tentativa de entrega.</div></li>
+            <li><div><b>Credenciais, conexão e webhooks</b>Conecte o Mercado Pago, troque Client ID e Client Secret e veja cada tentativa de entrega.</div></li>
             <li><div><b>Funciona no celular</b>O painel inteiro se adapta à tela pequena.</div></li>
           </ul>
         </div>
@@ -348,7 +359,7 @@
             <div class="mock-bar"><i></i><i></i><i></i><span>zyropay.app/app</span></div>
             <div class="mock-body">
               <div class="kpis">
-                <div class="kpi acc"><small>Saldo disponível</small><b class="num">R$ 8.412,60</b></div>
+                <div class="kpi acc"><small>Recebido (30 dias)</small><b class="num">R$ 8.412,60</b></div>
                 <div class="kpi"><small>Vendas hoje</small><b class="num">R$ 1.936,00</b></div>
                 <div class="kpi"><small>Conversão</small><b class="num">87%</b></div>
               </div>
@@ -378,8 +389,8 @@
               <li>Checkout, QR Code e copia e cola inclusos</li>
               <li>API REST, webhooks assinados e idempotência</li>
               <li>Credenciais de API que você gera e troca sozinho</li>
-              <li>Saque para qualquer chave PIX</li>
-              <li>Taxa descontada só quando o PIX é pago</li>
+              <li>PIX direto na sua conta Mercado Pago, sem saque</li>
+              <li>Taxa só quando o PIX é pago, descontada na origem</li>
             </ul>
             <a href="/cadastro" class="btn btn-primary btn-lg" style="position:relative">Criar conta grátis</a>
           </div>
@@ -390,14 +401,14 @@
             <div class="rows">
               <div><span>Valor da venda</span><b class="num" id="cGross">R$ 100,00</b></div>
               <div><span>Taxa Zyropay</span><b class="num" id="cFee">− R$ 2,00</b></div>
-              <div class="total"><span>Você recebe</span><span class="num" id="cNet">R$ 98,00</span></div>
+              <div class="total"><span>Líquido para você</span><span class="num" id="cNet">R$ 98,00</span></div>
             </div>
-            <p class="muted" style="font-size:13px">Abaixo de R$ 15,00 vale a taxa mínima de R$ 0,30. Volume alto? Fale com a gente: a taxa pode ser negociada por conta.</p>
+            <p class="muted" style="font-size:13px">Abaixo de R$ 15,00 vale a taxa mínima de R$ 0,30. A tarifa do próprio Mercado Pago pelo PIX é cobrada por ele, à parte. Volume alto? A taxa pode ser negociada por conta.</p>
           </div>
         </div>
         <div class="card ptable reveal">
           <div class="scroll"><table>
-            <thead><tr><th>Valor da venda</th><th>Taxa</th><th>Taxa efetiva</th><th>Você recebe</th></tr></thead>
+            <thead><tr><th>Valor da venda</th><th>Taxa</th><th>Taxa efetiva</th><th>Líquido para você</th></tr></thead>
             <tbody>
               <tr><td>R$ 5,00</td><td>R$ 0,30</td><td>6,0%</td><td>R$ 4,70</td></tr>
               <tr><td>R$ 15,00</td><td>R$ 0,30</td><td>2,0%</td><td>R$ 14,70</td></tr>
@@ -522,11 +533,11 @@ print(r.json()["checkout_url"])</pre>
           <div class="head" style="margin-bottom:24px"><span class="kicker">Webhooks</span><h2>Seu sistema sabe do pagamento antes do cliente fechar a página</h2><p>Cada mudança vira um POST assinado para o seu endereço, com reenvio automático.</p></div>
           <div class="events">
             <div class="ev"><i style="background:var(--accent)"></i><code>charge.created</code>cobrança criada</div>
-            <div class="ev"><i style="background:var(--good)"></i><code>charge.paid</code>PIX pago e saldo creditado</div>
+            <div class="ev"><i style="background:var(--good)"></i><code>charge.paid</code>PIX pago e confirmado</div>
             <div class="ev"><i style="background:var(--warn)"></i><code>charge.expired</code>prazo para pagar acabou</div>
             <div class="ev"><i style="background:var(--muted)"></i><code>charge.canceled</code>cobrança cancelada</div>
             <div class="ev"><i style="background:var(--bad)"></i><code>charge.refunded</code>pagamento devolvido</div>
-            <div class="ev"><i style="background:var(--accent-2)"></i><code>withdrawal.*</code>saque pedido, pago ou recusado</div>
+            <div class="ev"><i style="background:var(--accent-2)"></i><code>charge.failed</code>pagamento recusado</div>
           </div>
           <p class="muted" style="margin-top:16px;font-size:14px">Falhou? Tentamos de novo após 10 s, 1 min, 5 min, 30 min e 2 h. O histórico de entregas fica no painel.</p>
         </div>
@@ -582,7 +593,7 @@ def valid(raw_body: bytes, header: str, secret: str) -> bool:
         <div class="head reveal"><span class="kicker">Segurança</span><h2>Feito para lidar com dinheiro</h2><p>Camadas simples e verificáveis, sem promessa vaga.</p></div>
         <div class="sec">
           <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div><h3>Secrets só como hash</h3><p>O Client Secret é exibido uma vez e guardado apenas como SHA-256. Nem a nossa equipe consegue ler.</p></div>
-          <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M4 6h16M4 18h10"/></svg></div><h3>Comparação em tempo constante</h3><p>A validação das credenciais usa comparação resistente a ataques de temporização.</p></div>
+          <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M4 6h16M4 18h10"/></svg></div><h3>Tokens do Mercado Pago cifrados</h3><p>A autorização da sua conta fica criptografada (AES-256-GCM) e você revoga quando quiser, aqui ou no Mercado Pago.</p></div>
           <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z"/></svg></div><h3>Webhooks com HMAC</h3><p>Cada aviso é assinado com o seu segredo <span class="mono">whsec_</span>, com carimbo de tempo contra repetição.</p></div>
           <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4m0 4h.01"/></svg></div><h3>Proteção contra força bruta</h3><p>Tentativas inválidas de credencial ou de login bloqueiam o autor por alguns minutos.</p></div>
           <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div><h3>Limite de requisições</h3><p>120 por minuto por conta, com <span class="mono">Retry-After</span> quando passa do limite.</p></div>
@@ -606,20 +617,18 @@ def valid(raw_body: bytes, header: str, secret: str) -> bool:
           <div class="card case reveal"><small>Plataformas</small><h3>Várias lojas, um padrão</h3><p>Use <span class="mono">external_id</span> para ligar cada cobrança ao seu pedido e concilie com uma consulta.</p></div>
         </div>
 
-        <div class="subhead reveal" style="margin-top:72px"><div><h3>Por que não só uma chave PIX?</h3><p>A chave aceita o dinheiro. O gateway cuida de tudo que vem depois.</p></div></div>
-        <div class="card cmp reveal">
-          <table>
-            <thead><tr><th></th><th>Chave PIX direta</th><th class="us">Zyropay</th></tr></thead>
-            <tbody>
-              <tr><td>QR Code único por pedido</td><td class="no">—</td><td class="us yes">✓</td></tr>
-              <tr><td>Confirmação automática de pagamento</td><td class="no">Conferir extrato</td><td class="us yes">✓ webhook em segundos</td></tr>
-              <tr><td>Valor e pedido amarrados</td><td class="no">Manual</td><td class="us yes">✓ <span class="mono">external_id</span></td></tr>
-              <tr><td>Prazo de validade do PIX</td><td class="no">—</td><td class="us yes">✓ 5 min a 24 h</td></tr>
-              <tr><td>API para integrar ao seu sistema</td><td class="no">—</td><td class="us yes">✓</td></tr>
-              <tr><td>Painel de vendas e saldo</td><td class="no">Extrato do banco</td><td class="us yes">✓</td></tr>
-              <tr><td>Custo</td><td>Varia por banco</td><td class="us yes">2% · mín. R$ 0,30</td></tr>
-            </tbody>
-          </table>
+        <div class="subhead reveal" style="margin-top:72px"><div><h3>O que fica com o Mercado Pago e o que vem do Zyropay</h3><p>O Zyropay não substitui a sua conta: ele é a camada de produto que faz o PIX do Mercado Pago ser fácil de cobrar, integrar e acompanhar.</p></div></div>
+        <div class="split reveal">
+          <div class="card splitcard">
+            <small>Continua no Mercado Pago</small>
+            <h3>O PIX e o dinheiro</h3>
+            <ul><li>Processamento e liquidação do PIX</li><li>O dinheiro cai direto na sua conta, sem intermediário</li><li>A tarifa do PIX, conforme o plano da sua conta</li><li>Cadastro, KYC e contrato com você</li><li>Devoluções e extrato oficial</li></ul>
+          </div>
+          <div class="card splitcard us">
+            <small>Vem do Zyropay</small>
+            <h3>A camada de produto</h3>
+            <ul><li>API simples em português, com Client ID e Client Secret que você troca</li><li>Checkout PIX hospedado com QR, copia e cola e contagem</li><li>Webhooks assinados com reenvio automático e histórico</li><li>Painel de cobranças, taxas e conversão</li><li>Idempotência, <span class="mono">external_id</span> e exportação CSV para conciliação</li></ul>
+          </div>
         </div>
       </div>
     </section>
@@ -629,16 +638,17 @@ def valid(raw_body: bytes, header: str, secret: str) -> bool:
       <div class="wrap faq-wrap">
         <div class="reveal"><div class="head" style="margin-bottom:0"><span class="kicker">Perguntas frequentes</span><h2>Ficou com dúvida?</h2><p>As respostas mais comuns. Se não achar a sua, a <a href="/docs" style="color:var(--accent-2)">documentação</a> tem os detalhes.</p></div></div>
         <div class="faq reveal">
-          <details open><summary>Como funciona a taxa?</summary><div>É de 2% sobre cada PIX pago, com mínimo de R$ 0,30. Ela é descontada na hora em que o pagamento é confirmado: você vê o valor bruto, a taxa e o líquido em cada cobrança. Cobranças expiradas ou canceladas não pagam nada.</div></details>
+          <details open><summary>Como funciona a taxa?</summary><div>É de 2% sobre cada PIX pago, com mínimo de R$ 0,30. O Mercado Pago desconta essa comissão na origem, no momento do pagamento, e repassa para o Zyropay; o resto fica na sua conta. Cobranças expiradas ou canceladas não pagam nada. A tarifa do próprio Mercado Pago pelo PIX é cobrada por ele, à parte, conforme o plano da sua conta.</div></details>
+          <details><summary>Preciso ter conta no Mercado Pago?</summary><div>Sim. É o Mercado Pago que processa o PIX e recebe o dinheiro. Você conecta a sua conta ao Zyropay em um clique (autorização OAuth), sem repassar senha, e pode revogar quando quiser.</div></details>
+          <details><summary>O Zyropay segura o meu dinheiro?</summary><div>Não. O PIX cai direto na sua conta Mercado Pago. Por isso não existe saldo no Zyropay nem pedido de saque: você movimenta o dinheiro pelo próprio Mercado Pago.</div></details>
           <details><summary>O que são o Client ID e o Client Secret?</summary><div>São as duas credenciais da API. O <b>Client ID</b> é público e identifica a sua conta; o <b>Client Secret</b> é privado e prova que é você. Elas são geradas automaticamente e você pode gerar novas a qualquer momento em Painel › Integração.</div></details>
           <details><summary>Perdi o Client Secret. E agora?</summary><div>Por segurança ele aparece uma única vez e não é possível recuperá-lo. Gere um novo no painel (confirmando sua senha) e atualize o seu sistema. Se quiser, o segredo antigo continua valendo por 1 ou 24 horas para você trocar sem interrupção.</div></details>
           <details><summary>Preciso saber programar?</summary><div>Não. Pelo painel você gera a cobrança, copia o link e manda para o cliente. A API é opcional, para quem quer automatizar.</div></details>
-          <details><summary>Quem processa o PIX?</summary><div>O PIX é processado pelo Mercado Pago. O Zyropay cuida da cobrança, do saldo, da taxa, dos avisos e dos saques de cada lojista.</div></details>
-          <details><summary>Quando posso sacar?</summary><div>O valor entra no saldo assim que o PIX é confirmado. Você pede o saque (mínimo de R$ 10,00) para a sua chave PIX e acompanha o status no painel e por webhook.</div></details>
           <details><summary>Quanto tempo o cliente tem para pagar?</summary><div>Por padrão, 30 minutos. Pela API você escolhe de 5 minutos a 24 horas com <span class="mono">expires_in</span>. Depois disso a cobrança expira e o QR deixa de valer.</div></details>
           <details><summary>Qual o valor mínimo e máximo por cobrança?</summary><div>De R$ 1,00 a R$ 50.000,00 por cobrança.</div></details>
-          <details><summary>Posso testar antes de vender?</summary><div>Sim: crie uma cobrança de R$ 1,00 pelo painel, pague pelo seu banco e veja o webhook chegar. A documentação tem um passo a passo de testes.</div></details>
-          <details><summary>Minha conta precisa de aprovação?</summary><div>Sim. Depois do cadastro (com CPF ou CNPJ válido), nossa equipe analisa e libera a conta. Você é avisado e já pode entrar no painel.</div></details>
+          <details><summary>Dá para devolver um pagamento?</summary><div>Sim, pela API (<span class="mono">POST /v1/charges/{id}/refund</span>) ou pela sua conta Mercado Pago. A devolução sai da sua conta e a cobrança vira <span class="mono">refunded</span>.</div></details>
+          <details><summary>Posso testar antes de vender?</summary><div>Sim: conecte a conta, crie uma cobrança de R$ 1,00, pague pelo seu banco e veja o webhook chegar. A documentação tem um passo a passo de testes.</div></details>
+          <details><summary>Minha conta precisa de aprovação?</summary><div>Sim. Depois do cadastro (com CPF ou CNPJ válido), nossa equipe analisa e libera a conta. Aprovada, você entra no painel e conecta o Mercado Pago.</div></details>
         </div>
       </div>
     </section>
@@ -647,7 +657,7 @@ def valid(raw_body: bytes, header: str, secret: str) -> bool:
     <section class="final">
       <div class="wrap reveal">
         <h2>Comece a receber hoje</h2>
-        <p>Cadastro em 2 minutos. Sua conta é analisada e liberada pela nossa equipe, e as credenciais da API são geradas para você automaticamente.</p>
+        <p>Cadastro em 2 minutos. Sua conta é analisada e liberada pela nossa equipe; depois é só conectar o Mercado Pago e as credenciais da API são geradas para você automaticamente.</p>
         <div class="cta"><a href="/cadastro" class="btn btn-primary btn-lg">Criar conta grátis</a><a href="/docs" class="btn btn-lg">Explorar a API</a></div>
         <p class="fine">2% por PIX pago · mínimo R$ 0,30 · sem mensalidade</p>
       </div>
@@ -657,7 +667,7 @@ def valid(raw_body: bytes, header: str, secret: str) -> bool:
   <footer class="site">
     <div class="wrap">
       <div class="cols">
-        <div><a href="/" class="brand" id="brandF" style="color:var(--text)">Zyropay</a><p class="about">Gateway de pagamentos PIX para quem vende online. Cobre, receba e saque com API, webhooks e painel.</p></div>
+        <div><a href="/" class="brand" id="brandF" style="color:var(--text)">Zyropay</a><p class="about">A camada de produto para o PIX do seu Mercado Pago: API, checkout, webhooks e painel. O dinheiro cai direto na sua conta.</p></div>
         <div><h4>Produto</h4><ul><li><a href="#recursos">Recursos</a></li><li><a href="#como">Como funciona</a></li><li><a href="#precos">Preços</a></li><li><a href="#seguranca">Segurança</a></li></ul></div>
         <div><h4>Desenvolvedores</h4><ul><li><a href="/docs">Documentação</a></li><li><a href="/docs#autenticacao">Autenticação</a></li><li><a href="/docs#criar-cobranca">Criar cobrança</a></li><li><a href="/docs#webhooks">Webhooks</a></li></ul></div>
         <div><h4>Conta</h4><ul><li><a href="/cadastro">Criar conta</a></li><li><a href="/entrar">Entrar</a></li><li><a href="#faq">Perguntas frequentes</a></li></ul></div>

@@ -57,7 +57,7 @@ body { min-height: 100vh; }
 .tip b { display: block; font-size: 14px; color: var(--text); }
 .tip span { color: var(--muted); }
 
-/* listas (cobranças, saques, lojistas): grade que vira cartão no celular */
+/* listas (cobranças, lojistas): grade que vira cartão no celular */
 .list { display: grid; }
 .row { display: grid; align-items: center; gap: 14px; padding: 13px 22px; border-bottom: 1px solid var(--line); font-size: 14px; }
 .row:last-child { border-bottom: 0; }

@@ -26,8 +26,11 @@ export const config = {
   sessionDays: 7,
   timezone: 'America/Sao_Paulo',
 
+  // Aplicativo do Zyropay no Mercado Pago (modelo marketplace): cada lojista conecta a própria conta por OAuth
+  // e o PIX cai direto nela. A taxa do Zyropay vai como comissão (application_fee) para a conta dona do aplicativo.
   mp: {
-    accessToken: env.MP_ACCESS_TOKEN || '',
+    clientId: env.MP_CLIENT_ID || '',
+    clientSecret: env.MP_CLIENT_SECRET || '',
     webhookSecret: env.MP_WEBHOOK_SECRET || '',
   },
   mock: env.MOCK_PROVIDER === '1',
@@ -38,7 +41,6 @@ export const config = {
 
   minChargeCents: 100, // R$ 1,00
   maxChargeCents: 5_000_000, // R$ 50.000,00
-  minWithdrawalCents: 1000, // R$ 10,00
   defaultExpiresMin: 30,
 
   admin: { username: env.ADMIN_USER || 'ADMIN', password: env.ADMIN_PASSWORD || 'LELEO' },

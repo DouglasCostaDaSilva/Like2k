@@ -9,11 +9,10 @@ import { config } from './config.js';
 const file = path.join(config.dataDir, 'zyropay.json');
 
 const defaults = () => ({
-  seq: { user: 0, charge: 0, withdrawal: 0, delivery: 0 },
+  seq: { user: 0, charge: 0, delivery: 0 },
   users: [],
   sessions: {},
   charges: [],
-  withdrawals: [],
   deliveries: [],
   idempotency: {},
 });

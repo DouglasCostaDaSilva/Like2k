@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Documentação da API · Zyropay</title>
-  <meta name="description" content="Documentação completa da API do Zyropay: autenticação com Client ID e Client Secret, cobranças PIX, saldo, saques, webhooks assinados, erros e guias de integração." />
+  <meta name="description" content="Documentação completa da API do Zyropay: conexão com o Mercado Pago, autenticação com Client ID e Client Secret, cobranças PIX, webhooks assinados, erros e guias de integração." />
   <meta name="theme-color" content="#08080b" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -33,13 +33,13 @@
         <div class="grp">Primeiros passos</div>
         <a href="#visao-geral">Visão geral</a><a href="#inicio-rapido">Início rápido</a><a href="#url-base">URL base e versões</a>
         <div class="grp">Autenticação</div>
-        <a href="#autenticacao">Duas credenciais</a><a href="#enviar-credenciais">Enviando as credenciais</a><a href="#gerar-credenciais" data-kw="criar automático painel">Gerando as credenciais</a><a href="#regenerar" data-kw="trocar renovar rotacionar">Regenerando</a><a href="#rotacao">Troca sem interrupção</a><a href="#revogar">Revogando</a><a href="#boas-praticas-credenciais">Boas práticas</a><a href="#erros-autenticacao">Erros de autenticação</a><a href="#verificar-credenciais">GET /v1/account</a>
+        <a href="#conectar-mercado-pago" data-kw="oauth conta conectar">Conectar o Mercado Pago</a><a href="#autenticacao">Duas credenciais</a><a href="#enviar-credenciais">Enviando as credenciais</a><a href="#gerar-credenciais" data-kw="criar automático painel">Gerando as credenciais</a><a href="#regenerar" data-kw="trocar renovar rotacionar">Regenerando</a><a href="#rotacao">Troca sem interrupção</a><a href="#revogar">Revogando</a><a href="#boas-praticas-credenciais">Boas práticas</a><a href="#erros-autenticacao">Erros de autenticação</a><a href="#verificar-credenciais">GET /v1/account</a>
         <div class="grp">Conceitos</div>
         <a href="#valores-datas" data-kw="centavos iso">Valores, datas e IDs</a><a href="#ciclo-de-vida">Ciclo de vida</a><a href="#taxas" data-kw="tarifa 2% mínimo">Taxas</a><a href="#idempotencia">Idempotência</a><a href="#paginacao" data-kw="cursor starting_after">Paginação</a><a href="#limites" data-kw="rate limit requisições">Limites</a>
         <div class="grp">Cobranças</div>
         <a href="#objeto-cobranca">Objeto cobrança</a><a href="#criar-cobranca">Criar cobrança</a><a href="#consultar-cobranca">Consultar</a><a href="#listar-cobrancas">Listar</a><a href="#cancelar-cobranca">Cancelar</a><a href="#checkout">Checkout e QR Code</a>
-        <div class="grp">Conta</div>
-        <a href="#saldo">Saldo</a><a href="#saques" data-kw="withdrawal retirada">Saques</a>
+        <div class="grp">Conta e relatórios</div>
+        <a href="#devolucao" data-kw="estorno refund">Devolver pagamento</a><a href="#resumo" data-kw="relatório conciliação csv balance">Resumo e relatórios</a>
         <div class="grp">Webhooks</div>
         <a href="#webhooks">Configurar</a><a href="#eventos">Eventos</a><a href="#formato-evento">Formato do evento</a><a href="#validar-assinatura" data-kw="hmac signature">Validar a assinatura</a><a href="#reenvios">Reenvios</a><a href="#boas-praticas-webhooks">Boas práticas</a>
         <div class="grp">Referência</div>
@@ -54,27 +54,28 @@
       <div class="mtoc"><label class="hidden" for="mSel">Ir para</label><select class="input" id="mSel" aria-label="Ir para uma seção"></select></div>
       <article class="page">
         <h1>Documentação da API</h1>
-        <p class="lead">Crie cobranças PIX, receba avisos de pagamento e controle seu saldo e saques. Tudo por uma API REST em JSON, autenticada com um par de credenciais que você mesmo gera e troca.</p>
+        <p class="lead">Crie cobranças PIX na sua conta Mercado Pago, receba avisos de pagamento e acompanhe o resultado. Tudo por uma API REST em JSON, autenticada com um par de credenciais que você mesmo gera e troca.</p>
 
         <!-- =================== PRIMEIROS PASSOS =================== -->
         <h2 id="visao-geral">Visão geral</h2>
-        <p>O Zyropay é um gateway de pagamentos PIX. Seu sistema pede uma cobrança, o cliente paga com o app do banco e o Zyropay avisa por <b>webhook</b> assim que o dinheiro cai. O valor entra no seu saldo, já com a taxa descontada, e você saca para a sua chave PIX.</p>
+        <p>O Zyropay é a camada de produto em cima do PIX do <b>Mercado Pago</b>. Você conecta a sua conta Mercado Pago, o seu sistema pede uma cobrança, o cliente paga com o app do banco e o Zyropay avisa por <b>webhook</b> assim que o dinheiro cai. O PIX cai <b>direto na sua conta Mercado Pago</b>: o Zyropay não recebe nem guarda dinheiro seu, só cobra a comissão de 2% (mínimo R$ 0,30), que o Mercado Pago desconta na origem.</p>
         <div class="cards-doc">
-          <a href="#inicio-rapido"><b>Início rápido</b><span>Da conta criada à primeira cobrança paga em 5 passos.</span></a>
+          <a href="#inicio-rapido"><b>Início rápido</b><span>Da conta criada à primeira cobrança paga em 6 passos.</span></a>
           <a href="#autenticacao"><b>Autenticação</b><span>Client ID + Client Secret: como gerar, enviar, trocar e revogar.</span></a>
           <a href="#criar-cobranca"><b>Cobranças</b><span>Criar, consultar, listar e cancelar cobranças PIX.</span></a>
           <a href="#webhooks"><b>Webhooks</b><span>Eventos assinados com HMAC-SHA256 e reenvio automático.</span></a>
         </div>
         <h3>O que você encontra aqui</h3>
         <ul>
-          <li><b>API</b>: <code>POST /v1/charges</code>, <code>GET /v1/charges</code>, <code>GET /v1/charges/{id}</code>, <code>POST /v1/charges/{id}/cancel</code>, <code>GET /v1/balance</code>, <code>GET|POST /v1/withdrawals</code> e <code>GET /v1/account</code>.</li>
-          <li><b>Avisos</b>: webhooks para cobranças e saques.</li>
+          <li><b>API</b>: <code>POST /v1/charges</code>, <code>GET /v1/charges</code>, <code>GET /v1/charges/{id}</code>, <code>POST /v1/charges/{id}/cancel</code>, <code>POST /v1/charges/{id}/refund</code>, <code>GET /v1/summary</code> e <code>GET /v1/account</code>.</li>
+          <li><b>Avisos</b>: webhooks para cada mudança de status de uma cobrança.</li>
           <li><b>Exemplos</b> em cURL, Node.js, PHP, Python, Go e Ruby. A linguagem escolhida fica salva para as próximas seções.</li>
         </ul>
 
         <h2 id="inicio-rapido">Início rápido</h2>
         <ol class="steps-doc">
           <li><div><b>Crie sua conta</b>Cadastre-se em <a href="/cadastro">Criar conta</a> com CPF ou CNPJ válido. Nossa equipe analisa e libera o acesso; você é avisado.</div></li>
+          <li><div><b>Conecte o Mercado Pago</b>No painel, abra <b>Integração › Conta Mercado Pago</b> e clique em <b>Conectar</b>. Você autoriza o Zyropay a criar cobranças na sua conta (OAuth) e volta ao painel. Sem isso a API responde <code>409 mercadopago_not_connected</code>. Detalhes em <a href="#conectar-mercado-pago">Conectar o Mercado Pago</a>.</div></li>
           <li><div><b>Pegue suas credenciais</b>Entre no painel e abra <b>Integração</b>. O <b>Client ID</b> já está lá. O <b>Client Secret</b> é gerado automaticamente na primeira visita: copie agora, ele aparece uma única vez. Guarde as duas em variáveis de ambiente.</div></li>
           <li><div><b>Confirme que funcionam</b>
 <div class="tabs">
@@ -108,6 +109,32 @@ Resposta <code>200</code> com os dados da conta significa que está tudo certo. 
           <li>Requisições com corpo devem enviar <code>Content-Type: application/json</code>. Todas as respostas são JSON em UTF-8.</li>
           <li>Toda resposta traz o header <code>Zyropay-Request-Id</code>. Informe-o ao suporte se precisar investigar uma chamada.</li>
         </ul>
+
+        <!-- =================== CONEXÃO MERCADO PAGO =================== -->
+        <h2 id="conectar-mercado-pago">Conectar o Mercado Pago</h2>
+        <p>O Zyropay trabalha <b>em cima da sua conta Mercado Pago</b>. Cada cobrança PIX é criada nela, e o dinheiro cai direto nela, sem passar por nós. Por isso existem duas coisas diferentes:</p>
+        <div class="cards-doc">
+          <div><b>Conta Mercado Pago (conexão)</b><span>Autoriza o Zyropay a criar e consultar cobranças em seu nome. Feita uma vez, no painel, por OAuth. O Zyropay nunca vê a sua senha.</span></div>
+          <div><b>Client ID + Client Secret (API)</b><span>Autenticam as chamadas que o <b>seu sistema</b> faz ao Zyropay. Veja <a href="#autenticacao">Duas credenciais</a>.</span></div>
+        </div>
+        <h3>Como conectar</h3>
+        <ol class="steps-doc">
+          <li><div><b>Painel › Integração › Conectar Mercado Pago.</b></div></li>
+          <li><div><b>Entre no Mercado Pago</b> e autorize o aplicativo Zyropay.</div></li>
+          <li><div><b>Pronto.</b> Você volta ao painel com a conta “Conectada”, o apelido da conta e até quando a autorização vale.</div></li>
+        </ol>
+        <div class="tbl"><table><thead><tr><th>Status</th><th>Significado</th><th>API</th></tr></thead><tbody>
+          <tr><td><code>connected</code></td><td>Conectada e funcionando.</td><td>Cobranças liberadas.</td></tr>
+          <tr><td><code>reconnect</code></td><td>A autorização expirou ou foi revogada no Mercado Pago.</td><td><code>409 mercadopago_reconnect</code> até reconectar.</td></tr>
+          <tr><td><code>disconnected</code></td><td>Nunca conectada ou desconectada por você.</td><td><code>409 mercadopago_not_connected</code>.</td></tr>
+        </tbody></table></div>
+        <ul>
+          <li><b>Renovação automática.</b> A autorização do Mercado Pago vale cerca de 180 dias. O Zyropay a renova sozinho antes de vencer; você só precisa reconectar se a revogar.</li>
+          <li><b>Revogar.</b> Você pode desconectar no painel (com a senha) ou, a qualquer momento, em <i>Seu negócio › Configurações › Aplicativos conectados</i> no Mercado Pago. Cobranças já pagas não mudam.</li>
+          <li><b>Segurança.</b> Os tokens de acesso ficam criptografados (AES-256-GCM) no Zyropay e são usados apenas para criar, consultar, cancelar e devolver cobranças suas.</li>
+          <li><b>Dinheiro.</b> Quem recebe é você: o valor integral cai na sua conta Mercado Pago. A comissão do Zyropay vai como <code>application_fee</code> e é descontada na origem pelo Mercado Pago; a tarifa do próprio PIX é cobrada por ele, à parte.</li>
+        </ul>
+        <div class="note warn"><i>!</i><p>Cobranças pendentes só são confirmadas enquanto a conexão estiver ativa. Se ela cair, o QR Code continua pagável no Mercado Pago, mas o Zyropay só atualiza o status depois que você reconectar.</p></div>
 
         <!-- =================== AUTENTICAÇÃO =================== -->
         <h2 id="autenticacao">Autenticação com duas credenciais</h2>
@@ -265,12 +292,14 @@ curl https://zyropay.app/v1/account \
   "fee_percent": 2,
   "fee_min": 30,
   "webhook_url": "https://loja.com/webhooks/zyropay",
-  "client_id": "zp_id_7d99d2216afbbe0d"
+  "client_id": "zp_id_7d99d2216afbbe0d",
+  "mercadopago": { "status": "connected", "account_id": "1234567890" }
 }</pre>
         <div class="tbl"><table><thead><tr><th>Campo</th><th>Descrição</th></tr></thead><tbody>
           <tr><td><code>fee_percent</code></td><td>Percentual da taxa da sua conta (padrão <code>2</code>).</td></tr>
           <tr><td><code>fee_min</code></td><td>Taxa mínima por PIX pago, em centavos (padrão <code>30</code>).</td></tr>
           <tr><td><code>webhook_url</code></td><td>URL cadastrada para os webhooks, ou <code>null</code>.</td></tr>
+          <tr><td><code>mercadopago</code></td><td><code>status</code> da conexão (<code>connected</code>, <code>reconnect</code> ou <code>disconnected</code>) e o <code>account_id</code> da conta conectada.</td></tr>
         </tbody></table></div>
 
         <!-- =================== CONCEITOS =================== -->
@@ -278,7 +307,7 @@ curl https://zyropay.app/v1/account \
         <ul>
           <li><b>Dinheiro em centavos, sempre inteiro.</b> R$ 149,90 é <code>14990</code>. Nunca envie decimais nem texto formatado. A moeda é sempre BRL.</li>
           <li><b>Datas em ISO 8601, UTC</b>, por exemplo <code>2026-10-01T15:02:11.482Z</code>.</li>
-          <li><b>IDs com prefixo:</b> cobranças <code>ch_…</code> e eventos de webhook <code>evt_…</code>. Trate-os como texto opaco. Saques usam um número inteiro.</li>
+          <li><b>IDs com prefixo:</b> cobranças <code>ch_…</code> e eventos de webhook <code>evt_…</code>. Trate-os como texto opaco.</li>
           <li><b>Campos ausentes</b> vêm como <code>null</code>.</li>
         </ul>
 
@@ -292,19 +321,23 @@ pending ──► paid ──► refunded
         <p>Toda cobrança nasce <code>pending</code> e muda uma única vez para um estado final, exceto <code>paid</code>, que ainda pode virar <code>refunded</code> se o pagamento for devolvido. Cada mudança gera um <a href="#eventos">evento de webhook</a>. A tabela completa está em <a href="#status">Status</a>.</p>
 
         <h2 id="taxas">Taxas</h2>
-        <p>A taxa padrão é de <b>2% por PIX pago, com mínimo de R$ 0,30</b>. Ela só é cobrada quando a cobrança é paga: expirada, cancelada ou falha não custa nada.</p>
-        <pre data-lang="text" data-label="cálculo">
+<p>A comissão padrão do Zyropay é de <b>2% por PIX pago, com mínimo de R$ 0,30</b>. Ela só existe quando a cobrança é paga: expirada, cancelada ou com falha não custa nada.</p>
+<pre data-lang="text" data-label="cálculo">
 fee        = min(amount, max(fee_min, round(amount × fee_percent / 100)))
 net_amount = amount − fee</pre>
-        <div class="tbl"><table><thead><tr><th><code>amount</code></th><th><code>fee</code></th><th><code>net_amount</code></th></tr></thead><tbody>
-          <tr><td>500 (R$ 5,00)</td><td>30</td><td>470</td></tr>
-          <tr><td>1500 (R$ 15,00)</td><td>30</td><td>1470</td></tr>
-          <tr><td>14990 (R$ 149,90)</td><td>300</td><td>14690</td></tr>
-          <tr><td>100000 (R$ 1.000,00)</td><td>2000</td><td>98000</td></tr>
-        </tbody></table></div>
-        <p>Cada cobrança já mostra <code>fee</code> e <code>net_amount</code> ao ser criada, e o valor líquido entra no seu saldo quando ela é paga. Contas com volume alto podem ter taxa negociada; consulte a sua em <a href="#verificar-credenciais"><code>GET /v1/account</code></a>.</p>
+<div class="tbl"><table><thead><tr><th><code>amount</code></th><th><code>fee</code></th><th><code>net_amount</code></th></tr></thead><tbody>
+  <tr><td>500 (R$ 5,00)</td><td>30</td><td>470</td></tr>
+  <tr><td>1500 (R$ 15,00)</td><td>30</td><td>1470</td></tr>
+  <tr><td>14990 (R$ 149,90)</td><td>300</td><td>14690</td></tr>
+  <tr><td>100000 (R$ 1.000,00)</td><td>2000</td><td>98000</td></tr>
+</tbody></table></div>
+<ul>
+  <li>O Zyropay envia <code>fee</code> ao Mercado Pago como <code>application_fee</code> ao criar o PIX. O Mercado Pago a desconta do pagamento e repassa ao Zyropay no momento em que o PIX é pago.</li>
+  <li><code>net_amount</code> é o valor <b>depois da comissão do Zyropay</b>. A tarifa do PIX do próprio Mercado Pago é cobrada por ele, conforme o plano da sua conta, e <b>não</b> entra nesse número.</li>
+  <li>Contas com volume alto podem ter taxa negociada; consulte a sua em <a href="#verificar-credenciais"><code>GET /v1/account</code></a>.</li>
+</ul>
 
-        <h2 id="idempotencia">Idempotência</h2>
+<h2 id="idempotencia">Idempotência</h2>
         <p>Falhas de rede acontecem. Para repetir uma criação de cobrança sem arriscar duplicidade, envie o header <code>Idempotency-Key</code> com um valor único por operação (o número do pedido ou um UUID).</p>
         <ul>
           <li>A primeira chamada cria a cobrança e responde <code>201 Created</code>.</li>
@@ -329,7 +362,6 @@ net_amount = amount − fee</pre>
           <tr><td>Validade (<code>expires_in</code>)</td><td>de 300 s (5 min) a 86400 s (24 h). Padrão 1800 s (30 min)</td></tr>
           <tr><td><code>description</code> / <code>external_id</code></td><td>140 / 80 caracteres (o excedente é cortado)</td></tr>
           <tr><td>Corpo da requisição</td><td>64 KB</td></tr>
-          <tr><td>Saque</td><td>mínimo R$ 10,00 e até 3 saques em análise ao mesmo tempo</td></tr>
           <tr><td>Tempo de resposta do seu webhook</td><td>10 segundos</td></tr>
         </tbody></table></div>
         <p>Toda resposta da API traz <code>X-RateLimit-Limit</code> e <code>X-RateLimit-Remaining</code>. Ao passar do limite você recebe <code>429</code> com o header <code>Retry-After</code> (segundos até a janela zerar). Aguarde esse tempo e tente de novo.</p>
@@ -340,8 +372,8 @@ net_amount = amount − fee</pre>
           <tr><td><code>id</code><span class="ty">string</span></td><td>Identificador, no formato <code>ch_</code> + 20 hexadecimais.</td></tr>
           <tr><td><code>status</code><span class="ty">string</span></td><td><code>pending</code>, <code>paid</code>, <code>expired</code>, <code>canceled</code>, <code>failed</code> ou <code>refunded</code>.</td></tr>
           <tr><td><code>amount</code><span class="ty">integer</span></td><td>Valor cobrado, em centavos.</td></tr>
-          <tr><td><code>fee</code><span class="ty">integer</span></td><td>Taxa do Zyropay, em centavos, cobrada se a cobrança for paga.</td></tr>
-          <tr><td><code>net_amount</code><span class="ty">integer</span></td><td><code>amount − fee</code>: o que entra no seu saldo.</td></tr>
+          <tr><td><code>fee</code><span class="ty">integer</span></td><td>Comissão do Zyropay, em centavos, cobrada se a cobrança for paga.</td></tr>
+          <tr><td><code>net_amount</code><span class="ty">integer</span></td><td><code>amount − fee</code>: o valor depois da comissão do Zyropay (a tarifa do Mercado Pago é à parte).</td></tr>
           <tr><td><code>description</code><span class="ty">string | null</span></td><td>Texto mostrado no checkout.</td></tr>
           <tr><td><code>external_id</code><span class="ty">string | null</span></td><td>Seu identificador (por exemplo o número do pedido).</td></tr>
           <tr><td><code>payer</code><span class="ty">object</span></td><td><code>name</code>, <code>email</code> e <code>document</code> (somente dígitos), cada um podendo ser <code>null</code>.</td></tr>
@@ -501,7 +533,8 @@ puts JSON.parse(res.body)["checkout_url"]</pre>
           <tr><td>400</td><td><code>amount</code> deve ser um inteiro em centavos entre 100 e 5000000.</td></tr>
           <tr><td>400</td><td><code>expires_in</code> deve ser entre 300 e 86400 segundos.</td></tr>
           <tr><td>400</td><td><code>payer.email</code> inválido. / <code>payer.document</code> (CPF ou CNPJ) inválido.</td></tr>
-          <tr><td>502</td><td>O provedor de pagamento não conseguiu gerar o PIX. Tente de novo (use a mesma <code>Idempotency-Key</code>).</td></tr>
+          <tr><td>409</td><td>Conecte sua conta Mercado Pago em Painel › Integração para criar cobranças. (<code>code: mercadopago_not_connected</code> ou <code>mercadopago_reconnect</code>)</td></tr>
+          <tr><td>502</td><td>O Mercado Pago não conseguiu gerar o PIX. Tente de novo (use a mesma <code>Idempotency-Key</code>).</td></tr>
         </tbody></table></div>
 
         <h2 id="consultar-cobranca">Consultar cobrança</h2>
@@ -619,69 +652,50 @@ requests.post(f"https://zyropay.app/v1/charges/{charge_id}/cancel", auth=AUTH).r
         <p>O <code>pix.copy_paste</code> é o mesmo conteúdo do QR Code. Se preferir gerar a imagem por conta própria, use qualquer biblioteca de QR Code com ele.</p>
 
         <!-- =================== CONTA =================== -->
-        <h2 id="saldo">Saldo</h2>
-        <div class="ep"><span class="m get">GET</span>/v1/balance<span class="auth">Client ID + Secret</span></div>
+        <h2 id="devolucao">Devolver pagamento</h2>
+        <div class="ep"><span class="m post">POST</span>/v1/charges/{id}/refund<span class="auth">Client ID + Secret</span></div>
+        <p>Devolve o valor integral de uma cobrança <code>paid</code> para quem pagou. A devolução sai da <b>sua conta Mercado Pago</b>. A cobrança passa a <code>refunded</code> e o evento <code>charge.refunded</code> é enviado. Outras situações respondem <code>400</code> (“Só é possível devolver cobranças pagas.”).</p>
+        <div class="tabs">
+<pre data-lang="curl" data-label="cURL">
+curl -X POST https://zyropay.app/v1/charges/ch_9f2c41e0a7b35d18c4e2/refund \
+  -u "$ZYROPAY_CLIENT_ID:$ZYROPAY_CLIENT_SECRET"</pre>
+<pre data-lang="js" data-label="Node.js">
+const res = await fetch(`https://zyropay.app/v1/charges/${id}/refund`, { method: 'POST', headers: { Authorization: `Basic ${auth}` } });
+console.log((await res.json()).status); // "refunded"</pre>
+<pre data-lang="py" data-label="Python">
+r = requests.post(f"https://zyropay.app/v1/charges/{charge_id}/refund", auth=AUTH)
+print(r.json()["status"])  # refunded</pre>
+        </div>
+        <div class="note"><i>i</i><p>Também é possível devolver direto pelo painel do Mercado Pago. Se o fizer por lá, o Zyropay percebe quando o Mercado Pago notifica a devolução e atualiza o status (e envia <code>charge.refunded</code>).</p></div>
+
+        <h2 id="resumo">Resumo e relatórios</h2>
+        <p>Como o dinheiro fica na sua conta Mercado Pago, o Zyropay não tem “saldo” nem “saque”. O que ele oferece é o <b>resultado das suas cobranças</b>, para conciliar com o extrato do Mercado Pago.</p>
+        <h3>GET /v1/summary</h3>
+        <div class="ep"><span class="m get">GET</span>/v1/summary<span class="auth">Client ID + Secret</span></div>
+        <div class="tbl"><table><thead><tr><th>Parâmetro</th><th>Descrição</th></tr></thead><tbody>
+          <tr><td><code>days</code></td><td>Período em dias, de 1 a 365. Padrão 30.</td></tr>
+        </tbody></table></div>
         <pre data-lang="curl" data-label="cURL">
-curl https://zyropay.app/v1/balance -u "$ZYROPAY_CLIENT_ID:$ZYROPAY_CLIENT_SECRET"</pre>
+curl "https://zyropay.app/v1/summary?days=7" -u "$ZYROPAY_CLIENT_ID:$ZYROPAY_CLIENT_SECRET"</pre>
         <pre data-lang="json" data-label="resposta · 200">
 {
-  "available": 842050,
-  "pending_withdrawals": 100000,
-  "total_received": 1250000,
-  "total_fees": 25000,
-  "total_withdrawn": 282950,
+  "period_days": 7,
+  "charges": { "pending": 3, "paid": 41, "expired": 5, "canceled": 1, "failed": 0, "refunded": 2 },
+  "paid_count": 41,
+  "gross_amount": 612350,
+  "fees": 12247,
+  "net_amount": 600103,
   "currency": "BRL"
 }</pre>
         <div class="tbl"><table><thead><tr><th>Campo</th><th>Descrição (centavos)</th></tr></thead><tbody>
-          <tr><td><code>available</code></td><td>O que você pode sacar agora.</td></tr>
-          <tr><td><code>pending_withdrawals</code></td><td>Em saques pedidos e ainda não pagos (já reservado fora do disponível).</td></tr>
-          <tr><td><code>total_received</code></td><td>Soma bruta das cobranças pagas.</td></tr>
-          <tr><td><code>total_fees</code></td><td>Soma das taxas dessas cobranças.</td></tr>
-          <tr><td><code>total_withdrawn</code></td><td>Saques já pagos.</td></tr>
+          <tr><td><code>charges</code></td><td>Quantidade de cobranças <b>criadas</b> no período, por status atual.</td></tr>
+          <tr><td><code>paid_count</code></td><td>Cobranças <b>pagas</b> no período (pela data do pagamento).</td></tr>
+          <tr><td><code>gross_amount</code></td><td>Soma dos valores pagos.</td></tr>
+          <tr><td><code>fees</code></td><td>Soma da comissão do Zyropay sobre elas.</td></tr>
+          <tr><td><code>net_amount</code></td><td><code>gross_amount − fees</code>. Cobranças devolvidas saem da conta.</td></tr>
         </tbody></table></div>
-        <p>Fórmula: <code>available = Σ net_amount das cobranças pagas − saques pagos − saques em análise</code>.</p>
-
-        <h2 id="saques">Saques</h2>
-        <p>Você pede o saque pela API ou pelo painel; nossa equipe faz o PIX para a chave informada e marca como pago. Se o saque for recusado, o valor volta ao seu saldo.</p>
-        <h3>Pedir um saque</h3>
-        <div class="ep"><span class="m post">POST</span>/v1/withdrawals<span class="auth">Client ID + Secret</span></div>
-        <div class="tbl"><table><thead><tr><th>Campo</th><th>Descrição</th></tr></thead><tbody>
-          <tr><td><code>amount</code><span class="req">obrigatório</span></td><td>Centavos. Mínimo 1000 (R$ 10,00) e até o saldo disponível.</td></tr>
-          <tr><td><code>pix_key</code><span class="opt">opcional</span></td><td>Chave PIX de destino. Se omitida, usa a chave padrão da conta (Painel › Conta). Precisa ter ao menos 5 caracteres.</td></tr>
-        </tbody></table></div>
-        <div class="tabs">
-<pre data-lang="curl" data-label="cURL">
-curl -X POST https://zyropay.app/v1/withdrawals \
-  -u "$ZYROPAY_CLIENT_ID:$ZYROPAY_CLIENT_SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{ "amount": 500000, "pix_key": "financeiro@loja.com" }'</pre>
-<pre data-lang="js" data-label="Node.js">
-const res = await fetch('https://zyropay.app/v1/withdrawals', {
-  method: 'POST',
-  headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
-  body: JSON.stringify({ amount: 500000, pix_key: 'financeiro@loja.com' }),
-});
-console.log(await res.json());</pre>
-        </div>
-        <pre data-lang="json" data-label="resposta · 201 Created">
-{
-  "id": 14,
-  "amount": 500000,
-  "pix_key": "financeiro@loja.com",
-  "status": "pending",
-  "note": null,
-  "created_at": "2026-10-01T16:20:00.000Z",
-  "closed_at": null
-}</pre>
-        <h3>Listar saques</h3>
-        <div class="ep"><span class="m get">GET</span>/v1/withdrawals<span class="auth">Client ID + Secret</span></div>
-        <p>Devolve os 50 saques mais recentes em <code>{ "data": [ … ] }</code>.</p>
-        <div class="tbl"><table><thead><tr><th>Status</th><th>Significado</th></tr></thead><tbody>
-          <tr><td><code>pending</code></td><td>Em análise. O valor já está reservado.</td></tr>
-          <tr><td><code>paid</code></td><td>PIX enviado para a sua chave. O campo <code>note</code> pode trazer uma observação.</td></tr>
-          <tr><td><code>rejected</code></td><td>Recusado. O valor volta ao saldo disponível e <code>note</code> explica o motivo.</td></tr>
-        </tbody></table></div>
-        <p>Erros comuns: <code>400</code> “O saque mínimo é R$ 10,00.”, “Saldo disponível insuficiente”, “Informe a chave PIX…” e “Você já tem 3 saques em análise.”</p>
+        <h3>Exportar em CSV</h3>
+        <p>No painel, em <b>Início › Exportar CSV</b>, você baixa as cobranças dos últimos 30 dias (ou escolha outro período pela URL <code>/api/merchant/export.csv?days=90&amp;status=paid</code>, logado). O arquivo usa <code>;</code> como separador e vírgula decimal, e abre direto no Excel, com as colunas: <code>id, status, criada_em, paga_em, valor_brl, taxa_zyropay_brl, liquido_brl, external_id, descricao, pagador_nome, pagador_email</code>.</p>
 
         <!-- =================== WEBHOOKS =================== -->
         <h2 id="webhooks">Webhooks · configurar</h2>
@@ -696,15 +710,12 @@ console.log(await res.json());</pre>
         <h2 id="eventos">Eventos</h2>
         <div class="tbl"><table><thead><tr><th>Evento</th><th>Quando ocorre</th><th><code>data</code></th></tr></thead><tbody>
           <tr><td><code>charge.created</code></td><td>Uma cobrança foi criada.</td><td>Objeto cobrança</td></tr>
-          <tr><td><code>charge.paid</code></td><td>O PIX foi pago e o valor creditado.</td><td>Objeto cobrança</td></tr>
+          <tr><td><code>charge.paid</code></td><td>O PIX foi pago e já está na sua conta Mercado Pago.</td><td>Objeto cobrança</td></tr>
           <tr><td><code>charge.expired</code></td><td>O prazo acabou sem pagamento.</td><td>Objeto cobrança</td></tr>
           <tr><td><code>charge.canceled</code></td><td>A cobrança foi cancelada.</td><td>Objeto cobrança</td></tr>
           <tr><td><code>charge.failed</code></td><td>O pagamento foi recusado.</td><td>Objeto cobrança</td></tr>
           <tr><td><code>charge.refunded</code></td><td>O pagamento foi devolvido ao cliente.</td><td>Objeto cobrança</td></tr>
-          <tr><td><code>withdrawal.requested</code></td><td>Um saque foi pedido.</td><td>Objeto saque</td></tr>
-          <tr><td><code>withdrawal.paid</code></td><td>O saque foi pago.</td><td>Objeto saque</td></tr>
-          <tr><td><code>withdrawal.rejected</code></td><td>O saque foi recusado.</td><td>Objeto saque</td></tr>
-          <tr><td><code>test.ping</code></td><td>Disparado pelo botão “Enviar teste”.</td><td>Mensagem de teste</td></tr>
+                                        <tr><td><code>test.ping</code></td><td>Disparado pelo botão “Enviar teste”.</td><td>Mensagem de teste</td></tr>
         </tbody></table></div>
 
         <h2 id="formato-evento">Formato do evento</h2>
@@ -713,7 +724,7 @@ console.log(await res.json());</pre>
           <tr><td><code>id</code></td><td>Identificador único do evento (<code>evt_…</code>). Use para deduplicar.</td></tr>
           <tr><td><code>type</code></td><td>Nome do evento, como <code>charge.paid</code>.</td></tr>
           <tr><td><code>created_at</code></td><td>Quando o evento foi gerado.</td></tr>
-          <tr><td><code>data</code></td><td>O objeto relacionado (cobrança ou saque).</td></tr>
+          <tr><td><code>data</code></td><td>O objeto relacionado (a cobrança, ou a mensagem de teste).</td></tr>
         </tbody></table></div>
         <h4>Headers da requisição</h4>
         <div class="tbl"><table><thead><tr><th>Header</th><th>Valor</th></tr></thead><tbody>
@@ -742,21 +753,6 @@ console.log(await res.json());</pre>
     "expires_at": "2026-10-01T15:30:00.000Z",
     "paid_at": "2026-10-01T15:02:10.901Z",
     "created_at": "2026-10-01T15:00:00.000Z"
-  }
-}</pre>
-<pre data-lang="json" data-label="withdrawal.paid">
-{
-  "id": "evt_81c20be4a9d7f3560b12",
-  "type": "withdrawal.paid",
-  "created_at": "2026-10-02T11:40:03.120Z",
-  "data": {
-    "id": 14,
-    "amount": 500000,
-    "pix_key": "financeiro@loja.com",
-    "status": "paid",
-    "note": "Enviado às 11:39",
-    "created_at": "2026-10-01T16:20:00.000Z",
-    "closed_at": "2026-10-02T11:40:03.000Z"
   }
 }</pre>
 <pre data-lang="json" data-label="test.ping">
@@ -960,11 +956,11 @@ end</pre>
         <h2 id="status">Status</h2>
         <div class="tbl status-tbl"><table><thead><tr><th>Status</th><th>Descrição</th><th>Final?</th><th>Evento</th></tr></thead><tbody>
           <tr><td><span class="st status pending">pending</span></td><td>Aguardando o pagamento.</td><td>Não</td><td><code>charge.created</code></td></tr>
-          <tr><td><span class="st status paid">paid</span></td><td>Pago. O valor líquido entrou no seu saldo.</td><td>Quase: pode virar <code>refunded</code></td><td><code>charge.paid</code></td></tr>
+          <tr><td><span class="st status paid">paid</span></td><td>Pago. O valor já está na sua conta Mercado Pago.</td><td>Quase: pode virar <code>refunded</code></td><td><code>charge.paid</code></td></tr>
           <tr><td><span class="st status expired">expired</span></td><td>O prazo acabou sem pagamento.</td><td>Sim</td><td><code>charge.expired</code></td></tr>
           <tr><td><span class="st status canceled">canceled</span></td><td>Cancelada por você (API ou painel).</td><td>Sim</td><td><code>charge.canceled</code></td></tr>
           <tr><td><span class="st status failed">failed</span></td><td>Pagamento recusado pelo provedor.</td><td>Sim</td><td><code>charge.failed</code></td></tr>
-          <tr><td><span class="st status refunded">refunded</span></td><td>Pagamento devolvido ao cliente. O valor sai do seu saldo.</td><td>Sim</td><td><code>charge.refunded</code></td></tr>
+          <tr><td><span class="st status refunded">refunded</span></td><td>Pagamento devolvido ao cliente, a partir da sua conta Mercado Pago.</td><td>Sim</td><td><code>charge.refunded</code></td></tr>
         </tbody></table></div>
 
         <h2 id="erros">Erros</h2>
@@ -985,6 +981,8 @@ end</pre>
           <tr><td>400</td><td><code>invalid_request</code></td><td>Parâmetro inválido ou operação que o estado atual não permite. Corrija a requisição; repetir não adianta.</td></tr>
           <tr><td>401</td><td><code>unauthorized</code></td><td>Credenciais ausentes ou inválidas. Confira Client ID e Client Secret.</td></tr>
           <tr><td>403</td><td><code>forbidden</code></td><td>Conta desativada.</td></tr>
+          <tr><td>409</td><td><code>mercadopago_not_connected</code></td><td>A conta Mercado Pago ainda não foi conectada. Conecte em Painel › Integração.</td></tr>
+          <tr><td>409</td><td><code>mercadopago_reconnect</code></td><td>A autorização do Mercado Pago expirou ou foi revogada. Reconecte no painel.</td></tr>
           <tr><td>404</td><td><code>not_found</code></td><td>Rota ou recurso inexistente na sua conta.</td></tr>
           <tr><td>429</td><td><code>rate_limited</code></td><td>Limite de requisições ou credenciais inválidas em excesso. Espere <code>Retry-After</code>.</td></tr>
           <tr><td>500</td><td><code>internal_error</code></td><td>Erro nosso. Tente de novo; se persistir, informe o <code>request_id</code>.</td></tr>
@@ -1011,7 +1009,7 @@ async function zyropay(path, options = {}, attempt = 1) {
 
         <h2 id="changelog">Changelog</h2>
         <div class="tbl"><table><thead><tr><th>Data</th><th>Mudança</th></tr></thead><tbody>
-          <tr><td>2026-10-01</td><td><b>Lançamento da API v1.</b> Cobranças PIX (criar, consultar, listar, cancelar), saldo, saques e dados da conta.</td></tr>
+          <tr><td>2026-10-01</td><td><b>Lançamento da API v1.</b> Cobranças PIX na conta Mercado Pago do lojista (criar, consultar, listar, cancelar, devolver), resumo do período e dados da conta. O PIX cai direto na conta do lojista; a comissão do Zyropay vai como <code>application_fee</code>.</td></tr>
           <tr><td>2026-10-01</td><td><b>Autenticação com duas credenciais</b> (Client ID + Client Secret), geradas automaticamente e regeneráveis pelo cliente, com carência opcional do secret antigo e revogação.</td></tr>
           <tr><td>2026-10-01</td><td>Webhooks assinados com HMAC-SHA256, reenvio automático em até 6 tentativas e idempotência com <code>Idempotency-Key</code>.</td></tr>
           <tr><td>2026-10-01</td><td>Paginação por cursor, erros com <code>code</code> estável e <code>request_id</code>, headers <code>X-RateLimit-*</code> e <code>Retry-After</code>.</td></tr>
@@ -1071,9 +1069,9 @@ app.listen(3000);</pre>
         <h2 id="testes">Testes e go-live</h2>
         <p>Não existe um ambiente de sandbox separado: a API conversa com o PIX de verdade. Para testar com segurança use valores pequenos e as ferramentas abaixo.</p>
         <ol class="steps-doc">
-          <li><div><b>Teste as credenciais</b> com <code>GET /v1/account</code>. Se vier <code>200</code>, estão corretas.</div></li>
+          <li><div><b>Conecte o Mercado Pago</b> em Painel › Integração e teste as credenciais com <code>GET /v1/account</code>. Se vier <code>200</code>, estão corretas (o campo <code>mercadopago.status</code> deve ser <code>connected</code>).</div></li>
           <li><div><b>Teste uma cobrança sem pagar.</b> Crie uma de R$ 1,00 (<code>amount: 100</code>), confira o <code>checkout_url</code> e cancele com <code>POST /v1/charges/{id}/cancel</code>. Não há taxa.</div></li>
-          <li><div><b>Teste um pagamento real de R$ 1,00</b> pelo seu banco. A taxa mínima de R$ 0,30 será descontada; confira <code>fee</code>, <code>net_amount</code> e o saldo.</div></li>
+          <li><div><b>Teste um pagamento real de R$ 1,00</b> pelo seu banco. A taxa mínima de R$ 0,30 será descontada na origem; confira <code>fee</code>, <code>net_amount</code>, o resumo em <code>GET /v1/summary</code> e o recebimento na sua conta Mercado Pago.</div></li>
           <li><div><b>Teste o webhook.</b> Use <b>Enviar teste</b> no painel (<code>test.ping</code>). Para desenvolver localmente, exponha sua máquina com um túnel HTTPS e cadastre a URL gerada.</div></li>
           <li><div><b>Teste a falha.</b> Faça o seu endpoint responder <code>500</code> por um instante e veja as tentativas aparecerem em Integração › Entregas de webhook.</div></li>
         </ol>
@@ -1090,6 +1088,9 @@ app.listen(3000);</pre>
 
         <h2 id="faq">Perguntas frequentes</h2>
         <div class="faq">
+          <details><summary>O Zyropay recebe ou guarda o meu dinheiro?</summary><div>Não. O PIX é criado na sua conta Mercado Pago e cai direto nela. O Zyropay só recebe a comissão (<code>application_fee</code>) que o Mercado Pago desconta na origem. Por isso não existem saldo nem saques no Zyropay.</div></details>
+          <details><summary>Preciso ter conta no Mercado Pago?</summary><div>Sim, uma conta que possa receber PIX. Você a conecta uma vez em Painel › Integração.</div></details>
+          <details><summary>A conexão com o Mercado Pago caiu. O que faço?</summary><div>Se a autorização foi revogada ou expirou, o status vira <code>reconnect</code> e a API responde <code>409 mercadopago_reconnect</code>. Clique em <b>Reconectar</b> no painel. Cobranças já pagas não são afetadas.</div></details>
           <details><summary>Posso ter mais de um par de credenciais?</summary><div>Cada conta tem um par ativo (mais um secret anterior durante a carência). Para separar ambientes ou sistemas, use contas diferentes ou rotacione com carência.</div></details>
           <details><summary>Esqueci o Client Secret. Dá para recuperar?</summary><div>Não. Ele é guardado apenas como hash e só aparece quando é gerado. Gere um novo em Painel › Integração (com a sua senha) e atualize o seu sistema. Use a carência para não derrubar nada.</div></details>
           <details><summary>Gerei novas credenciais e minha loja parou. E agora?</summary><div>Atualize o Client Secret (e o Client ID, se você trocou o par) nos servidores. Se você havia escolhido carência, o secret antigo ainda funciona até o prazo; senão, a chamada retorna 401 até o novo valor ser publicado.</div></details>
@@ -1097,7 +1098,7 @@ app.listen(3000);</pre>
           <details><summary>Por que o Client ID é público e o secret não?</summary><div>O Client ID só identifica; sozinho não autoriza nenhuma ação. Já o secret comprova a autoria. Separar os dois reduz o dano de um vazamento acidental de log.</div></details>
           <details><summary>Quanto tempo leva para eu ser avisado de um pagamento?</summary><div>O Zyropay é notificado pelo provedor assim que o PIX é confirmado e envia o webhook em seguida. Como garantia, ele também confere as cobranças pendentes a cada poucos segundos.</div></details>
           <details><summary>O cliente pode pagar depois de expirar?</summary><div>Não. Depois do prazo o QR Code deixa de valer e o checkout mostra “Este PIX expirou”. Crie outra cobrança.</div></details>
-          <details><summary>Dá para devolver um pagamento?</summary><div>Sim, a devolução é feita pela nossa equipe. Ao concluir, a cobrança vira <code>refunded</code>, o valor sai do seu saldo e o evento <code>charge.refunded</code> é enviado.</div></details>
+          <details><summary>Dá para devolver um pagamento?</summary><div>Sim: pela API (<code>POST /v1/charges/{id}/refund</code>) ou pela sua conta Mercado Pago. A devolução sai da sua conta, a cobrança vira <code>refunded</code> e o evento <code>charge.refunded</code> é enviado.</div></details>
           <details><summary>Posso mudar a taxa da minha conta?</summary><div>A taxa padrão é 2% com mínimo de R$ 0,30. Para volume alto, fale com a nossa equipe: a taxa pode ser ajustada por conta e aparece em <code>GET /v1/account</code>.</div></details>
           <details><summary>Vocês oferecem SDKs?</summary><div>Ainda não. A API é pequena o bastante para usar com qualquer cliente HTTP, e os exemplos acima cobrem as linguagens mais comuns.</div></details>
         </div>

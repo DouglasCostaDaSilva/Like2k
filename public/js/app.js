@@ -9,14 +9,13 @@ const icon = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" 
 const I = {
   home: icon('<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>'),
   charges: icon('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 14h3v3M21 14v.01M14 21h7v-4"/>'),
-  withdrawals: icon('<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 21h16"/>'),
   integration: icon('<path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/>'),
   account: icon('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'),
   merchants: icon('<path d="M3 9h18l-1.5-5h-15z"/><path d="M5 9v11h14V9M9 20v-6h6v6"/>'),
 };
 const MENUS = {
-  merchant: [['home', 'Início', I.home], ['charges', 'Cobranças', I.charges], ['withdrawals', 'Saques', I.withdrawals], ['integration', 'Integração', I.integration], ['account', 'Conta', I.account]],
-  admin: [['admin-home', 'Visão geral', I.home], ['admin-merchants', 'Lojistas', I.merchants], ['admin-charges', 'Cobranças', I.charges], ['admin-withdrawals', 'Saques', I.withdrawals]],
+  merchant: [['home', 'Início', I.home], ['charges', 'Cobranças', I.charges], ['integration', 'Integração', I.integration], ['account', 'Conta', I.account]],
+  admin: [['admin-home', 'Visão geral', I.home], ['admin-merchants', 'Lojistas', I.merchants], ['admin-charges', 'Cobranças', I.charges]],
 };
 
 function renderNav() {
@@ -141,11 +140,16 @@ LOADERS.home = async () => {
   const o = await api('/api/merchant/overview');
   const u = state.me;
   $('#hello').textContent = `Olá, ${u.name.split(' ')[0]}`;
-  $('#hBalance').textContent = brl(o.balance.available);
-  $('#hBalanceSub').textContent = o.balance.pendingWithdrawals ? `${brl(o.balance.pendingWithdrawals)} em saques em análise` : 'pronto para sacar';
+  $('#hBalance').textContent = brl(o.last30.net);
+  $('#hBalanceSub').textContent = o.last30.count ? `${brl(o.last30.gross)} em ${int(o.last30.count)} ${o.last30.count === 1 ? 'PIX' : 'PIX'} · ${brl(o.last30.fees)} de taxa Zyropay` : 'líquido, já descontada a taxa do Zyropay';
+  state.me.mercadopago = o.mercadopago;
+  const mpOff = o.mercadopago.status !== 'connected';
+  $('#mpBanner').style.display = mpOff ? '' : 'none';
+  $('#mpBanner').classList.toggle('hidden', !mpOff);
+  $('#mpBannerText').textContent = o.mercadopago.status === 'reconnect' ? 'A conexão com o Mercado Pago precisa ser refeita para criar cobranças.' : 'Conecte sua conta Mercado Pago para começar a receber: o PIX cai direto nela.';
   $('#hToday').textContent = brl(o.today.amount);
   $('#hTodayCount').textContent = `${int(o.today.count)} ${o.today.count === 1 ? 'PIX pago' : 'PIX pagos'}`;
-  $('#hGross').textContent = brl(o.balance.gross);
+  $('#hGross').textContent = brl(o.totals.gross);
   $('#hConv').textContent = o.conversion == null ? '—' : `${o.conversion}%`;
   $('#hFee').textContent = `${String(u.feePercent).replace('.', ',')}%`;
   $('#hFeeMin').textContent = `mínimo de ${brl(u.feeMinCents)} por PIX`;
@@ -267,38 +271,11 @@ function showCharge(c, qrImage, fresh, webhooks = []) {
   }
 }
 
-// ------------------------------------------------------------------ saques
-moneyMask($('#wAmount'));
-let wAvailable = 0;
-LOADERS.withdrawals = async () => {
-  const { withdrawals, balance } = await api('/api/merchant/withdrawals');
-  wAvailable = balance.available;
-  $('#wAvail').textContent = brl(balance.available);
-  $('#wPending').textContent = brl(balance.pendingWithdrawals);
-  if (!$('#wKey').value) $('#wKey').value = state.me.pixKey || '';
-  $('#wList').innerHTML = withdrawals.length ? withdrawals.map((w) => `<div class="row cols-wd">
-      <div class="t"><strong>${esc(w.pixKey)}</strong><span>${w.note ? esc(w.note) : `Saque #${w.id}`}</span></div>
-      <div class="t hide-sm"><strong>${dt(w.createdAt)}</strong><span>${w.closedAt ? `finalizado ${dt(w.closedAt)}` : ''}</span></div>
-      <div class="amt" style="order:3">${brl(w.amount)}</div><div style="order:2">${status(w.status)}</div></div>`).join('')
-    : '<div class="empty"><b>Nenhum saque ainda</b>Quando tiver saldo, peça o saque ao lado.</div>';
-};
-$('#wAll').addEventListener('click', () => { $('#wAmount').value = (wAvailable / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }); });
-$('#wForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const btn = e.submitter || $('#wForm button[type=submit]');
-  busy(btn, true, ' Enviando…');
-  try {
-    await api('/api/merchant/withdrawals', { method: 'POST', body: { amount: toCents($('#wAmount').value), pixKey: $('#wKey').value } });
-    alertBox($('#wMsg'), 'Saque solicitado! Você será avisado quando for pago.', 'ok');
-    $('#wAmount').value = '';
-    LOADERS.withdrawals();
-  } catch (err) { alertBox($('#wMsg'), err.message); } finally { busy(btn, false); }
-});
-
 // ------------------------------------------------------------------ integração
 let secretShown = false;
 LOADERS.integration = async () => {
   const u = state.me;
+  loadMercadoPago();
   loadCredentials();
   $('#iUrl').value = u.webhookUrl || '';
   secretShown = false;
@@ -316,6 +293,31 @@ async function loadHooks() {
     : '<div class="empty"><b>Nenhum aviso enviado ainda</b>Cadastre a URL do webhook e clique em “Enviar teste”.</div>';
 }
 $('#iReload').addEventListener('click', loadHooks);
+// ---- conexão com o Mercado Pago (OAuth): o PIX cai direto na conta do lojista
+async function loadMercadoPago() {
+  const mp = await api('/api/merchant/mercadopago');
+  state.me.mercadopago = mp;
+  const on = mp.status === 'connected', re = mp.status === 'reconnect';
+  $('#mpText').innerHTML = `O PIX das suas cobranças cai <b>direto na sua conta Mercado Pago</b>, sem passar pelo Zyropay. Cobramos ${String(state.me.feePercent).replace('.', ',')}% (mínimo ${brl(state.me.feeMinCents)}) por PIX pago, descontados na hora pelo Mercado Pago como comissão. A tarifa do próprio Mercado Pago é cobrada à parte por eles.`;
+  $('#mpStatus').innerHTML = on ? '<span class="status paid">Conectada</span>' : re ? '<span class="status failed">Reconectar</span>' : '<span class="status pending">Não conectada</span>';
+  $('#mpMeta').classList.toggle('hidden', mp.status === 'disconnected');
+  if (mp.status !== 'disconnected') $('#mpMeta').innerHTML = `<div><span>Conta</span><b>${esc(mp.nickname || '—')} · ${esc(mp.accountId)}</b></div><div><span>Conectada em</span><b>${dt(mp.connectedAt)}</b></div><div><span>Autorização válida até</span><b>${dt(mp.expiresAt)}</b></div>`;
+  $('#mpConnect').textContent = on ? 'Reconectar' : re ? 'Reconectar Mercado Pago' : 'Conectar Mercado Pago';
+  $('#mpConnect').classList.toggle('btn-primary', !on);
+  $('#mpDisconnect').classList.toggle('hidden', mp.status === 'disconnected');
+  alertBox($('#mpMsg'), re ? 'A autorização foi revogada ou expirou. Conecte de novo para voltar a criar cobranças.' : mp.configured === false ? 'Este Zyropay ainda não tem o aplicativo do Mercado Pago configurado. Avise o administrador.' : '', re || mp.configured === false ? 'error' : undefined);
+}
+$('#mpConnect').addEventListener('click', async (e) => {
+  busy(e.currentTarget, true, ' Abrindo…');
+  try { const { url } = await api('/api/merchant/mercadopago/connect', { method: 'POST' }); location.href = url; } catch (err) { busy(e.currentTarget, false); alertBox($('#mpMsg'), err.message); }
+});
+$('#mpDisconnect').addEventListener('click', async () => {
+  const ok = await confirmModal({ title: 'Desconectar o Mercado Pago', text: 'Você não poderá criar novas cobranças até conectar de novo. Cobranças já pagas não mudam. Para revogar a autorização também no Mercado Pago, acesse a sua conta lá (Seu negócio › Configurações › Aplicativos conectados). Confirme com a sua senha.', okText: 'Desconectar', danger: true, input: { label: 'Sua senha', type: 'password', placeholder: '••••••••' } });
+  if (!ok) return;
+  busy(ok.btn, true, ' Desconectando…');
+  try { await api('/api/merchant/mercadopago', { method: 'DELETE', body: { password: ok.value } }); ok.done(); toast('Mercado Pago desconectado.'); loadMercadoPago(); } catch (err) { busy(ok.btn, false); ok.fail(err.message); }
+});
+
 // ---- credenciais: Client ID (público) + Client Secret (só aparece quando é gerado)
 let cred = null;
 const whenTxt = (v) => (v ? dt(v) : '—');
@@ -414,13 +416,13 @@ $('#iTest').addEventListener('click', async (e) => {
 // ------------------------------------------------------------------ conta
 LOADERS.account = async () => {
   const u = state.me;
-  $('#aName').value = u.name; $('#aEmail').value = u.email; $('#aDoc').value = u.document; $('#aPhone').value = u.phone; $('#aPix').value = u.pixKey;
+  $('#aName').value = u.name; $('#aEmail').value = u.email; $('#aDoc').value = u.document; $('#aPhone').value = u.phone;
   $('#aFee').textContent = `${String(u.feePercent).replace('.', ',')}% (mínimo ${brl(u.feeMinCents)})`;
 };
 $('#accForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
-    const r = await api('/api/merchant/settings', { method: 'PUT', body: { name: $('#aName').value, phone: $('#aPhone').value, pixKey: $('#aPix').value } });
+    const r = await api('/api/merchant/settings', { method: 'PUT', body: { name: $('#aName').value, phone: $('#aPhone').value } });
     state.me = r.user; paintWho();
     alertBox($('#aMsg'), 'Dados salvos.', 'ok');
   } catch (err) { alertBox($('#aMsg'), err.message); }
@@ -440,14 +442,13 @@ LOADERS['admin-home'] = async () => {
   $('#adTpv').textContent = brl(o.tpv);
   $('#adRev').textContent = brl(o.revenue);
   $('#adRevToday').textContent = `${brl(o.today.fees)} hoje em ${int(o.today.count)} PIX`;
-  $('#adOwed').textContent = brl(o.owed);
+  $('#adOwed').textContent = `${int(o.merchants.connected)} de ${int(o.merchants.active)}`;
   $('#adMerch').textContent = int(o.merchants.active);
   $('#adMerchSub').textContent = o.merchants.pending ? `${int(o.merchants.pending)} aguardando aprovação` : 'nenhum cadastro em análise';
   $('#adSub').textContent = `Provedor: ${o.provider === 'mercadopago' ? 'Mercado Pago' : 'simulado (testes)'}`;
   $('#adChartSub').textContent = `${brl(o.days.reduce((a, d) => a + d.amount, 0))} processados · ${brl(o.days.reduce((a, d) => a + d.fees, 0))} em taxas`;
   barChart($('#adChart'), o.days, { label: 'Volume' });
   setBadge('admin-merchants', o.merchants.pending);
-  setBadge('admin-withdrawals', o.pendingWithdrawals);
 };
 
 let mStatus = '', merchants = [];
@@ -459,7 +460,7 @@ LOADERS['admin-merchants'] = async () => {
     <div class="t"><strong>${esc(m.name)}</strong><span>${esc(m.email)} · <span class="mono">${esc(m.document)}</span>${m.phone ? ` · ${esc(m.phone)}` : ''}</span></div>
     <div>${m.status === 'pending' ? '<span class="status pending">Em análise</span>' : status(m.status)}</div>
     <div class="hide-sm num">${String(m.feePercent).replace('.', ',')}% · mín. ${brl(m.feeMinCents)}</div>
-    <div class="amt">${brl(m.balance.available)}<small>${brl(m.balance.gross)} recebidos</small></div>
+    <div class="amt">${brl(m.totals.gross)}<small>${m.mercadopago.status === 'connected' ? 'MP conectado' : m.mercadopago.status === 'reconnect' ? 'MP: reconectar' : 'MP não conectado'}</small></div>
     <div class="act">${m.status === 'pending'
       ? `<button class="btn btn-sm btn-primary" data-m-approve="${m.id}">Aprovar</button><button class="btn btn-sm btn-danger" data-m-reject="${m.id}">Recusar</button>`
       : `<button class="btn btn-sm" data-m-fee="${m.id}">Taxa</button><button class="btn btn-sm ${m.status === 'active' ? 'btn-danger' : ''}" data-m-toggle="${m.id}">${m.status === 'active' ? 'Bloquear' : 'Reativar'}</button>`}</div>
@@ -514,37 +515,10 @@ $('#acStatus').addEventListener('click', (e) => { const b = e.target.closest('[d
 $('#acList').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-refund]');
   if (!b) return;
-  const ok = await confirmModal({ title: 'Devolver pagamento', text: 'O valor volta para quem pagou e sai do saldo do lojista. Não dá para desfazer.', okText: 'Devolver', danger: true });
+  const ok = await confirmModal({ title: 'Devolver pagamento', text: 'O valor volta para quem pagou, direto da conta Mercado Pago do lojista. Não dá para desfazer.', okText: 'Devolver', danger: true });
   if (!ok) return;
   busy(ok.btn, true);
   try { await api(`/api/admin/charges/${b.dataset.refund}/refund`, { method: 'POST' }); ok.done(); toast('Pagamento devolvido.'); LOADERS['admin-charges'](); } catch (err) { ok.fail(err.message); busy(ok.btn, false); }
-});
-
-let awStatus = 'pending', wds = [];
-LOADERS['admin-withdrawals'] = async () => {
-  wds = (await api('/api/admin/withdrawals')).withdrawals;
-  setBadge('admin-withdrawals', wds.filter((w) => w.status === 'pending').length);
-  const list = wds.filter((w) => !awStatus || w.status === awStatus);
-  $('#awList').innerHTML = list.length ? list.map((w) => `<div class="row cols-wd-admin">
-    <div class="t"><strong>${esc(w.merchant)}</strong><span>Saque #${w.id} · ${dt(w.createdAt)}</span></div>
-    <div class="t hide-sm"><strong class="mono">${esc(w.pixKey)}</strong><span>${w.note ? esc(w.note) : ''}</span></div>
-    <div class="amt">${brl(w.amount)}</div>
-    <div>${status(w.status)}</div>
-    <div class="act">${w.status === 'pending' ? `<button class="btn btn-sm" data-wcopy="${esc(w.pixKey)}">Copiar chave</button><button class="btn btn-sm btn-primary" data-wpaid="${w.id}">Marcar pago</button><button class="btn btn-sm btn-danger" data-wreject="${w.id}">Recusar</button>` : ''}</div></div>`).join('')
-    : '<div class="empty"><b>Nenhum saque aqui</b></div>';
-};
-$('#awStatus').addEventListener('click', (e) => { const b = e.target.closest('[data-s]'); if (!b) return; awStatus = b.dataset.s; $$('#awStatus button').forEach((x) => x.classList.toggle('on', x === b)); LOADERS['admin-withdrawals'](); });
-$('#awList').addEventListener('click', async (e) => {
-  const c = e.target.closest('[data-wcopy]');
-  if (c) { copy(c.dataset.wcopy, 'Chave PIX copiada'); return; }
-  const p = e.target.closest('[data-wpaid]'), r = e.target.closest('[data-wreject]');
-  if (!p && !r) return;
-  const w = wds.find((x) => x.id === Number((p || r).getAttribute(p ? 'data-wpaid' : 'data-wreject')));
-  const ok = await confirmModal(p
-    ? { title: `Confirmar saque de ${brl(w.amount)}`, text: `Confirme que você já fez o PIX de ${brl(w.amount)} para a chave <b class="mono">${esc(w.pixKey)}</b>.`, okText: 'Marcar como pago', input: { label: 'Comprovante / ID da transação (opcional)', placeholder: 'E2E…' } }
-    : { title: 'Recusar saque', text: 'O valor volta para o saldo do lojista.', okText: 'Recusar saque', danger: true, input: { label: 'Motivo (o lojista verá)', placeholder: 'Chave PIX inválida' } });
-  if (!ok) return;
-  try { await api(`/api/admin/withdrawals/${w.id}/${p ? 'paid' : 'reject'}`, { method: 'POST', body: { note: ok.value } }); ok.done(); toast(p ? 'Saque marcado como pago.' : 'Saque recusado.'); LOADERS['admin-withdrawals'](); } catch (err) { ok.fail(err.message); }
 });
 
 // ------------------------------------------------------------------ início
@@ -564,7 +538,12 @@ function paintWho() {
   $('#mockBanner').classList.toggle('hidden', !state.mock);
   paintWho();
   renderNav();
+  const mpBack = new URLSearchParams(location.search).get('mp');
+  if (mpBack) {
+    history.replaceState(null, '', `${location.pathname}${location.hash}`);
+    setTimeout(() => toast(mpBack === 'ok' ? 'Mercado Pago conectado!' : mpBack === 'cancelled' ? 'Conexão cancelada.' : 'Não foi possível conectar o Mercado Pago. Tente de novo.', mpBack === 'ok' ? undefined : 'error'), 400);
+  }
   go(location.hash.slice(1) || MENUS[state.me.role][0][0]);
-  if (state.me.role === 'admin') api('/api/admin/overview').then((o) => { setBadge('admin-merchants', o.merchants.pending); setBadge('admin-withdrawals', o.pendingWithdrawals); }).catch(() => {});
+  if (state.me.role === 'admin') api('/api/admin/overview').then((o) => { setBadge('admin-merchants', o.merchants.pending); }).catch(() => {});
 })();
 addEventListener('unhandledrejection', (e) => { if (e.reason?.status === 401) location.href = '/entrar'; });

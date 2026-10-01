@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 import { config, feeFor, root } from './src/config.js';
 import { db, load, save, nextId } from './src/db.js';
 import { provider, ProviderError } from './src/mercadopago.js';
+import { asSeller, saveConnection, disconnect, isConnected, connectionOut } from './src/connection.js';
 import { enqueue, newWebhookSecret, processDeliveries, deliverNow } from './src/webhooks.js';
 import {
   hashPassword, verifyPassword, findLogin, ensureAdmin, createSession, destroySession, destroyUserSessions,
@@ -66,19 +67,14 @@ function validWebhookUrl(raw) {
   return !(h === 'localhost' || h.endsWith('.local') || h.endsWith('.internal') || /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.)/.test(h) || h.includes(':'));
 }
 
-// ---------- saldo ----------
-function balanceOf(merchantId) {
-  let paid = 0, fees = 0, gross = 0, withdrawn = 0, pendingOut = 0;
+// ---------- totais (o dinheiro não passa pelo Zyropay: cai direto na conta Mercado Pago do lojista) ----------
+function totalsOf(merchantId, sinceMs = 0) {
+  const t = { count: 0, gross: 0, fees: 0, net: 0 };
   for (const c of db().charges) {
-    if (c.merchantId !== merchantId || c.status !== 'paid') continue;
-    gross += c.amount; fees += c.fee; paid += c.net;
+    if (c.merchantId !== merchantId || c.status !== 'paid' || (sinceMs && Date.parse(c.paidAt) < sinceMs)) continue;
+    t.count += 1; t.gross += c.amount; t.fees += c.fee; t.net += c.net;
   }
-  for (const w of db().withdrawals) {
-    if (w.merchantId !== merchantId) continue;
-    if (w.status === 'paid') withdrawn += w.amount;
-    if (w.status === 'pending') pendingOut += w.amount;
-  }
-  return { available: paid - withdrawn - pendingOut, gross, fees, withdrawn, pendingWithdrawals: pendingOut };
+  return t;
 }
 
 // ---------- formatos públicos ----------
@@ -90,11 +86,9 @@ const chargeOut = (c) => ({
   checkout_url: `${config.publicUrl}/pay/${c.id}`, expires_at: c.expiresAt, paid_at: c.paidAt, created_at: c.createdAt,
 });
 
-const withdrawalOut = (w) => ({ id: w.id, amount: w.amount, pix_key: w.pixKey, status: w.status, note: w.note, created_at: w.createdAt, closed_at: w.closedAt });
-
 const publicUser = (u) => ({
   id: u.id, role: u.role, status: u.status, name: u.name, email: u.email, username: u.username || null, document: u.document || '',
-  phone: u.phone || '', pixKey: u.pixKey || '', webhookUrl: u.webhookUrl || '', hasWebhookSecret: Boolean(u.webhookSecret),
+  phone: u.phone || '', mercadopago: connectionOut(u), webhookUrl: u.webhookUrl || '', hasWebhookSecret: Boolean(u.webhookSecret),
   feePercent: u.feePercent ?? config.feePercent, feeMinCents: u.feeMinCents ?? config.feeMinCents,
   createdAt: u.createdAt, lastLoginAt: u.lastLoginAt || null,
 });
@@ -123,20 +117,25 @@ async function createCharge(merchant, input, idemKey) {
   if (payer.email && !EMAIL_RE.test(String(payer.email))) return { status: 400, error: 'payer.email inválido.' };
   if (payer.document && !validDocument(payer.document)) return { status: 400, error: 'payer.document (CPF ou CNPJ) inválido.' };
 
+  if (!isConnected(merchant)) {
+    return merchant.mp
+      ? { status: 409, code: 'mercadopago_reconnect', error: 'A conexão com o Mercado Pago precisa ser refeita. Conecte a conta de novo em Painel › Integração.' }
+      : { status: 409, code: 'mercadopago_not_connected', error: 'Conecte sua conta Mercado Pago em Painel › Integração para criar cobranças.' };
+  }
   const fee = feeFor(amount, merchant);
   const charge = {
     id: `ch_${crypto.randomBytes(10).toString('hex')}`, seq: nextId('charge'), merchantId: merchant.id,
     amount, fee, net: amount - fee, description: String(input.description || '').slice(0, 140) || null,
     externalId: input.external_id ? String(input.external_id).slice(0, 80) : null,
     payer: { name: payer.name ? String(payer.name).slice(0, 80) : null, email: payer.email ? String(payer.email).slice(0, 120) : null, document: payer.document ? String(payer.document).replace(/\D/g, '') : null },
-    status: 'pending', provider: provider.name, providerId: null, qrCode: null, qrCodeBase64: null,
+    status: 'pending', provider: provider.name, mpAccount: merchant.mp.userId, providerId: null, qrCode: null, qrCodeBase64: null,
     expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(), paidAt: null, createdAt: now(),
   };
   try {
-    const p = await provider.createPix({ chargeId: charge.seq, amountCents: amount, description: charge.description, payer: charge.payer, expiresAt: Date.parse(charge.expiresAt) });
+    const p = await asSeller(merchant, (token) => provider.createPix({ token, chargeId: charge.seq, amountCents: amount, feeCents: fee, description: charge.description, payer: charge.payer, expiresAt: Date.parse(charge.expiresAt) }));
     Object.assign(charge, { providerId: p.providerId, qrCode: p.qrCode, qrCodeBase64: p.qrCodeBase64 });
   } catch (err) {
-    return { status: err.status || 502, error: err.message };
+    return { status: err.status || 502, error: err.message, ...(err.code ? { code: err.code } : {}) };
   }
   db().charges.push(charge);
   if (idemKey) db().idempotency[`${merchant.id}:${idemKey}`] = charge.id;
@@ -164,19 +163,27 @@ function markStatus(charge, status) {
   enqueue(merchant, `charge.${status}`, chargeOut(charge));
 }
 
-async function syncCharge(charge) {
-  if (!charge.providerId || charge.status !== 'pending') return charge;
+// deep: também reconfere cobranças pagas (para perceber devolução feita direto no Mercado Pago)
+async function syncCharge(charge, { deep = false } = {}) {
+  if (!charge.providerId || (charge.status !== 'pending' && !(deep && charge.status === 'paid'))) return charge;
   charge.lastSyncAt = Date.now();
   try {
-    const s = await provider.getStatus(charge.providerId);
+    const merchant = db().users.find((u) => u.id === charge.merchantId);
+    const s = await asSeller(merchant, (token) => provider.getStatus(token, charge.providerId));
     if (s.status === 'paid') markPaid(charge, s);
-    else if (s.status === 'failed' || s.status === 'refunded') markStatus(charge, s.status);
+    else if (s.status === 'refunded' || (s.status === 'failed' && charge.status === 'pending')) markStatus(charge, s.status);
   } catch { /* tenta de novo no próximo ciclo */ }
   if (charge.status === 'pending' && Date.parse(charge.expiresAt) < Date.now()) {
     markStatus(charge, 'expired');
-    provider.cancel(charge.providerId).catch(() => {});
+    cancelAtProvider(charge);
   }
   return charge;
+}
+
+// cancela no Mercado Pago (melhor esforço: a cobrança já está encerrada no Zyropay)
+function cancelAtProvider(charge) {
+  const merchant = db().users.find((u) => u.id === charge.merchantId);
+  return asSeller(merchant, (token) => provider.cancel(token, charge.providerId)).catch(() => {});
 }
 
 // confere cobranças pendentes periodicamente (garantia caso a notificação do Mercado Pago não chegue)
@@ -206,7 +213,7 @@ app.post('/api/auth/register', (req, res) => {
   db().users.push({
     id: nextId('user'), role: 'merchant', status: 'pending', name: String(name).trim().slice(0, 80), email: String(email).trim().toLowerCase(),
     passwordHash: hashPassword(password), document: String(document).replace(/\D/g, ''), phone: String(phone || '').slice(0, 30),
-    pixKey: '', webhookUrl: '', webhookSecret: newWebhookSecret(), createdAt: now(),
+    webhookUrl: '', webhookSecret: newWebhookSecret(), createdAt: now(),
   });
   ensureClientId(db().users.at(-1));
   save();
@@ -231,7 +238,7 @@ app.post('/api/auth/login', (req, res) => {
 app.post('/api/auth/logout', (req, res) => { destroySession(req, res); res.json({ ok: true }); });
 
 app.get('/api/me', requireAuth, (req, res) => {
-  res.json({ user: publicUser(req.user), mock: config.mock, publicUrl: config.publicUrl, limits: { minCharge: config.minChargeCents, maxCharge: config.maxChargeCents, minWithdrawal: config.minWithdrawalCents } });
+  res.json({ user: publicUser(req.user), mock: config.mock, publicUrl: config.publicUrl, mpConfigured: provider.configured(), limits: { minCharge: config.minChargeCents, maxCharge: config.maxChargeCents } });
 });
 
 // ---------- checkout público ----------
@@ -269,7 +276,9 @@ app.get('/api/merchant/overview', requireMerchant, (req, res) => {
   const todayPaid = paid.filter((c) => dayKey(new Date(c.paidAt)) === today);
   const closed = mine.filter((c) => c.status !== 'pending');
   res.json({
-    balance: balanceOf(req.user.id),
+    totals: totalsOf(req.user.id),
+    last30: totalsOf(req.user.id, Date.now() - 30 * 86400000),
+    mercadopago: connectionOut(req.user),
     today: { amount: todayPaid.reduce((a, c) => a + c.amount, 0), count: todayPaid.length },
     conversion: closed.length ? Math.round((paid.length / closed.length) * 100) : null,
     pending: mine.filter((c) => c.status === 'pending').length,
@@ -290,7 +299,7 @@ app.get('/api/merchant/charges', requireMerchant, (req, res) => {
 
 app.post('/api/merchant/charges', requireMerchant, wrap(async (req, res) => {
   const r = await createCharge(req.user, req.body || {});
-  if (r.error) return res.status(r.status).json({ error: r.error });
+  if (r.error) return res.status(r.status).json({ error: r.error, ...(r.code ? { code: r.code } : {}) });
   res.status(201).json({ charge: chargeOut(r.charge), qrImage: await qrImage(r.charge) });
 }));
 
@@ -306,7 +315,7 @@ app.post('/api/merchant/charges/:id/cancel', requireMerchant, wrap(async (req, r
   const c = db().charges.find((x) => x.id === req.params.id && x.merchantId === req.user.id);
   if (!c) return res.status(404).json({ error: 'Cobrança não encontrada.' });
   if (c.status !== 'pending') return res.status(400).json({ error: 'Só é possível cancelar cobranças pendentes.' });
-  await provider.cancel(c.providerId).catch(() => {});
+  await cancelAtProvider(c);
   markStatus(c, 'canceled');
   res.json({ charge: chargeOut(c) });
 }));
@@ -320,29 +329,57 @@ app.post('/api/merchant/charges/:id/simulate', requireMerchant, (req, res) => {
   res.json({ charge: chargeOut(c) });
 });
 
-app.get('/api/merchant/withdrawals', requireMerchant, (req, res) => {
-  res.json({ withdrawals: db().withdrawals.filter((w) => w.merchantId === req.user.id).slice().reverse(), balance: balanceOf(req.user.id) });
+// ---------- conexão com o Mercado Pago (OAuth) ----------
+// O callback chega por navegação vinda do Mercado Pago (cookie SameSite=Strict não vai junto),
+// então quem conecta é identificado pelo "state" aleatório, de uso único e válido por 10 minutos.
+const oauthStates = new Map();
+setInterval(() => { for (const [k, v] of oauthStates) if (v.expires < Date.now()) oauthStates.delete(k); }, 60000).unref();
+
+app.post('/api/merchant/mercadopago/connect', requireMerchant, (req, res) => {
+  if (!provider.configured()) return res.status(503).json({ error: 'O Mercado Pago ainda não foi configurado neste Zyropay (MP_CLIENT_ID e MP_CLIENT_SECRET).' });
+  const state = crypto.randomBytes(24).toString('hex');
+  oauthStates.set(state, { userId: req.user.id, expires: Date.now() + 10 * 60000 });
+  res.json({ url: provider.authorizeUrl(state) });
 });
 
-function requestWithdrawal(merchant, input) {
-  const amount = toInt(input.amount);
-  const pixKey = String(input.pix_key || input.pixKey || merchant.pixKey || '').trim();
-  const bal = balanceOf(merchant.id);
-  if (!Number.isInteger(amount) || amount < config.minWithdrawalCents) return { status: 400, error: `O saque mínimo é ${brl(config.minWithdrawalCents)}.` };
-  if (amount > bal.available) return { status: 400, error: `Saldo disponível insuficiente (${brl(bal.available)}).` };
-  if (pixKey.length < 5) return { status: 400, error: 'Informe a chave PIX que vai receber o saque.' };
-  if (db().withdrawals.filter((w) => w.merchantId === merchant.id && w.status === 'pending').length >= 3) return { status: 400, error: 'Você já tem 3 saques em análise.' };
-  const w = { id: nextId('withdrawal'), merchantId: merchant.id, merchant: merchant.name, amount, pixKey: pixKey.slice(0, 120), status: 'pending', note: null, createdAt: now(), closedAt: null };
-  db().withdrawals.push(w);
-  save();
-  enqueue(merchant, 'withdrawal.requested', withdrawalOut(w));
-  return { status: 201, withdrawal: w };
-}
+app.get('/oauth/mercadopago/callback', wrap(async (req, res) => {
+  const back = (q) => res.redirect(`/app?mp=${q}#integration`);
+  const st = oauthStates.get(String(req.query.state || ''));
+  oauthStates.delete(String(req.query.state || ''));
+  const user = st && st.expires > Date.now() ? db().users.find((u) => u.id === st.userId && u.role === 'merchant' && u.status === 'active') : null;
+  if (!user) return res.redirect('/entrar');
+  if (req.query.error || !req.query.code) return back('cancelled');
+  try {
+    const t = await provider.exchangeCode(String(req.query.code));
+    saveConnection(user, t, await provider.profile(t.accessToken));
+    return back('ok');
+  } catch (err) {
+    console.error('oauth mercadopago:', err.message);
+    return back('error');
+  }
+}));
 
-app.post('/api/merchant/withdrawals', requireMerchant, (req, res) => {
-  const r = requestWithdrawal(req.user, req.body || {});
-  if (r.error) return res.status(r.status).json({ error: r.error });
-  res.status(201).json({ withdrawal: r.withdrawal, balance: balanceOf(req.user.id) });
+app.get('/api/merchant/mercadopago', requireMerchant, (req, res) => res.json({ ...connectionOut(req.user), configured: provider.configured() }));
+
+app.delete('/api/merchant/mercadopago', requireMerchant, (req, res) => {
+  if (!verifyPassword(req.body?.password, req.user.passwordHash)) return res.status(400).json({ error: 'Senha incorreta.' });
+  disconnect(req.user);
+  res.json(connectionOut(req.user));
+});
+
+// exportação para conciliação (CSV)
+app.get('/api/merchant/export.csv', requireMerchant, (req, res) => {
+  const days = Math.min(365, Math.max(1, toInt(req.query.days) || 30));
+  const status = String(req.query.status || '');
+  const since = Date.now() - days * 86400000;
+  const cell = (v) => { const t = v == null ? '' : String(v); return /[";,\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const rows = db().charges.filter((c) => c.merchantId === req.user.id && Date.parse(c.createdAt) >= since && (!status || c.status === status));
+  const money = (c) => (c / 100).toFixed(2).replace('.', ',');
+  const lines = [['id', 'status', 'criada_em', 'paga_em', 'valor_brl', 'taxa_zyropay_brl', 'liquido_brl', 'external_id', 'descricao', 'pagador_nome', 'pagador_email'].join(';')];
+  for (const c of rows) lines.push([c.id, c.status, c.createdAt, c.paidAt, money(c.amount), money(c.fee), money(c.net), c.externalId, c.description, c.payer?.name, c.payer?.email].map(cell).join(';'));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="zyropay-cobrancas-${dayKey()}.csv"`);
+  res.send('\ufeff' + lines.join('\r\n'));
 });
 
 app.put('/api/merchant/settings', requireMerchant, (req, res) => {
@@ -352,7 +389,6 @@ app.put('/api/merchant/settings', requireMerchant, (req, res) => {
     if (!validWebhookUrl(url)) return res.status(400).json({ error: 'URL de webhook inválida. Use um endereço https público.' });
     u.webhookUrl = url;
   }
-  if (b.pixKey !== undefined) u.pixKey = String(b.pixKey).trim().slice(0, 120);
   if (b.phone !== undefined) u.phone = String(b.phone).slice(0, 30);
   if (b.name !== undefined && String(b.name).trim().length >= 3) u.name = String(b.name).trim().slice(0, 80);
   if (b.newPassword !== undefined) {
@@ -468,7 +504,7 @@ const v1 = express.Router();
 v1.use(apiAuth);
 v1.post('/charges', wrap(async (req, res) => {
   const r = await createCharge(req.user, req.body || {}, req.get('Idempotency-Key'));
-  if (r.error) return res.status(r.status).json({ error: r.error });
+  if (r.error) return res.status(r.status).json({ error: r.error, ...(r.code ? { code: r.code } : {}) });
   res.status(r.status).json({ ...chargeOut(r.charge), pix: { copy_paste: r.charge.qrCode, qr_code_image: await qrImage(r.charge) } });
 }));
 v1.get('/charges', (req, res) => {
@@ -493,25 +529,29 @@ v1.post('/charges/:id/cancel', wrap(async (req, res) => {
   const c = db().charges.find((x) => x.id === req.params.id && x.merchantId === req.user.id);
   if (!c) return res.status(404).json({ error: 'Cobrança não encontrada.' });
   if (c.status !== 'pending') return res.status(400).json({ error: 'Só é possível cancelar cobranças pendentes.' });
-  await provider.cancel(c.providerId).catch(() => {});
+  await cancelAtProvider(c);
   markStatus(c, 'canceled');
   res.json(chargeOut(c));
 }));
-v1.get('/balance', (req, res) => {
-  const b = balanceOf(req.user.id);
-  res.json({ available: b.available, pending_withdrawals: b.pendingWithdrawals, total_received: b.gross, total_fees: b.fees, total_withdrawn: b.withdrawn, currency: 'BRL' });
+v1.post('/charges/:id/refund', wrap(async (req, res) => {
+  const c = db().charges.find((x) => x.id === req.params.id && x.merchantId === req.user.id);
+  if (!c) return res.status(404).json({ error: 'Cobrança não encontrada.' });
+  if (c.status !== 'paid') return res.status(400).json({ error: 'Só é possível devolver cobranças pagas.' });
+  await asSeller(req.user, (token) => provider.refund(token, c.providerId));
+  markStatus(c, 'refunded');
+  res.json(chargeOut(c));
+}));
+v1.get('/summary', (req, res) => {
+  const days = Math.min(365, Math.max(1, toInt(req.query.days) || 30));
+  const since = Date.now() - days * 86400000;
+  const counts = { pending: 0, paid: 0, expired: 0, canceled: 0, failed: 0, refunded: 0 };
+  for (const c of db().charges) if (c.merchantId === req.user.id && Date.parse(c.createdAt) >= since) counts[c.status] = (counts[c.status] || 0) + 1;
+  const t = totalsOf(req.user.id, since);
+  res.json({ period_days: days, charges: counts, paid_count: t.count, gross_amount: t.gross, fees: t.fees, net_amount: t.net, currency: 'BRL' });
 });
 v1.get('/account', (req, res) => {
   const u = req.user;
-  res.json({ id: u.id, name: u.name, status: u.status, fee_percent: u.feePercent ?? config.feePercent, fee_min: u.feeMinCents ?? config.feeMinCents, webhook_url: u.webhookUrl || null, client_id: u.credentials.clientId });
-});
-v1.get('/withdrawals', (req, res) => {
-  res.json({ data: db().withdrawals.filter((w) => w.merchantId === req.user.id).slice(-50).reverse().map(withdrawalOut) });
-});
-v1.post('/withdrawals', (req, res) => {
-  const r = requestWithdrawal(req.user, req.body || {});
-  if (r.error) return res.status(r.status).json({ error: r.error });
-  res.status(201).json(withdrawalOut(r.withdrawal));
+  res.json({ id: u.id, name: u.name, status: u.status, fee_percent: u.feePercent ?? config.feePercent, fee_min: u.feeMinCents ?? config.feeMinCents, webhook_url: u.webhookUrl || null, client_id: u.credentials.clientId, mercadopago: { status: connectionOut(u).status, account_id: u.mp?.userId || null } });
 });
 v1.use((req, res) => res.status(404).json({ error: 'Rota não encontrada.' }));
 app.use('/v1', express.json({ limit: '64kb' }), v1);
@@ -523,7 +563,7 @@ app.post('/webhooks/mercadopago', wrap(async (req, res) => {
   if (!dataId || (type && type !== 'payment')) return res.sendStatus(200);
   if (!provider.verifyWebhook({ signature: req.get('x-signature'), requestId: req.get('x-request-id'), dataId })) return res.sendStatus(401);
   const c = db().charges.find((x) => x.providerId === String(dataId));
-  if (c) await syncCharge(c);
+  if (c) await syncCharge(c, { deep: true });
   res.sendStatus(200);
 }));
 
@@ -544,16 +584,14 @@ app.get('/api/admin/overview', requireAdmin, (req, res) => {
     tpv: paid.reduce((a, c) => a + c.amount, 0),
     revenue: paid.reduce((a, c) => a + c.fee, 0),
     today: { amount: todayPaid.reduce((a, c) => a + c.amount, 0), fees: todayPaid.reduce((a, c) => a + c.fee, 0), count: todayPaid.length },
-    owed: merchants.reduce((a, m) => a + balanceOf(m.id).available + balanceOf(m.id).pendingWithdrawals, 0),
-    pendingWithdrawals: data.withdrawals.filter((w) => w.status === 'pending').length,
-    merchants: { active: merchants.filter((m) => m.status === 'active').length, pending: merchants.filter((m) => m.status === 'pending').length },
+    merchants: { active: merchants.filter((m) => m.status === 'active').length, pending: merchants.filter((m) => m.status === 'pending').length, connected: merchants.filter(isConnected).length },
     days,
     provider: provider.name,
   });
 });
 
 app.get('/api/admin/merchants', requireAdmin, (req, res) => {
-  res.json({ merchants: db().users.filter((u) => u.role === 'merchant').slice().reverse().map((u) => ({ ...publicUser(u), balance: balanceOf(u.id) })) });
+  res.json({ merchants: db().users.filter((u) => u.role === 'merchant').slice().reverse().map((u) => ({ ...publicUser(u), totals: totalsOf(u.id) })) });
 });
 
 app.patch('/api/admin/merchants/:id', requireAdmin, (req, res) => {
@@ -576,7 +614,7 @@ app.patch('/api/admin/merchants/:id', requireAdmin, (req, res) => {
     u.feeMinCents = m;
   }
   save();
-  res.json({ merchant: { ...publicUser(u), balance: balanceOf(u.id) } });
+  res.json({ merchant: { ...publicUser(u), totals: totalsOf(u.id) } });
 });
 
 app.delete('/api/admin/merchants/:id', requireAdmin, (req, res) => {
@@ -598,28 +636,10 @@ app.post('/api/admin/charges/:id/refund', requireAdmin, wrap(async (req, res) =>
   const c = db().charges.find((x) => x.id === req.params.id);
   if (!c) return res.status(404).json({ error: 'Cobrança não encontrada.' });
   if (c.status !== 'paid') return res.status(400).json({ error: 'Só é possível devolver cobranças pagas.' });
-  if (balanceOf(c.merchantId).available < c.net) return res.status(400).json({ error: 'O lojista não tem saldo disponível para cobrir a devolução.' });
-  await provider.refund(c.providerId);
+  await asSeller(db().users.find((u) => u.id === c.merchantId), (token) => provider.refund(token, c.providerId));
   markStatus(c, 'refunded');
   res.json({ charge: chargeOut(c) });
 }));
-
-app.get('/api/admin/withdrawals', requireAdmin, (req, res) => {
-  res.json({ withdrawals: db().withdrawals.slice().reverse().slice(0, 500) });
-});
-
-app.post('/api/admin/withdrawals/:id/:action', requireAdmin, (req, res) => {
-  const w = db().withdrawals.find((x) => x.id === Number(req.params.id));
-  if (!w) return res.status(404).json({ error: 'Saque não encontrado.' });
-  if (w.status !== 'pending') return res.status(400).json({ error: 'Este saque já foi finalizado.' });
-  if (!['paid', 'reject'].includes(req.params.action)) return res.status(400).json({ error: 'Ação inválida.' });
-  w.status = req.params.action === 'paid' ? 'paid' : 'rejected';
-  w.note = String(req.body?.note || '').slice(0, 200) || null;
-  w.closedAt = now();
-  save();
-  enqueue(db().users.find((u) => u.id === w.merchantId), `withdrawal.${w.status}`, withdrawalOut(w));
-  res.json({ withdrawal: w });
-});
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Rota não encontrada.' }));
 
@@ -632,7 +652,7 @@ app.get('/docs', page('docs.html'));
 app.use(express.static(path.join(root, 'public'), { index: 'index.html' }));
 
 app.use((err, req, res, next) => {
-  if (err instanceof ProviderError) return res.status(err.status).json({ error: err.message });
+  if (err instanceof ProviderError) return res.status(err.status).json({ error: err.message, ...(err.code ? { code: err.code } : {}) });
   if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'JSON inválido.' });
   console.error(err);
   res.status(500).json({ error: 'Erro interno. Tente novamente.' });
@@ -641,6 +661,6 @@ app.use((err, req, res, next) => {
 app.listen(config.port, () => {
   console.log(`Zyropay rodando em ${config.publicUrl}`);
   if (config.mock) console.log('⚠  MOCK_PROVIDER=1 — provedor simulado, nenhum PIX real é gerado.');
-  else if (!config.mp.accessToken) console.log('⚠  MP_ACCESS_TOKEN não definido — não será possível gerar PIX.');
+  else if (!provider.configured()) console.log('⚠  MP_CLIENT_ID / MP_CLIENT_SECRET não definidos — os lojistas não conseguem conectar o Mercado Pago.');
   syncPending();
 });
