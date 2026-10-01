@@ -57,3 +57,7 @@ code { font-family: ui-monospace, monospace; background: rgba(255,255,255,.08); 
   .filters { flex-direction: column; }
   .filters select { width: 100%; }
 }
+.opt { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; cursor: pointer; }
+.opt input { width: 20px; height: 20px; accent-color: #ff6a3d; flex: none; }
+.checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; padding: 10px 0; }
+.checks .opt { margin: 0; }

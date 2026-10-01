@@ -19,7 +19,6 @@ const env = process.env;
 
 export const config = {
   port: Number(env.PORT || 3000),
-  publicUrl: (env.PUBLIC_URL || `http://localhost:${env.PORT || 3000}`).replace(/\/+$/, ''),
   mock: env.MOCK === '1',
   dataDir: path.resolve(root, env.DATA_DIR || 'data'),
   secureCookies: env.SECURE_COOKIES === '1',
@@ -27,24 +26,25 @@ export const config = {
   sessionDays: 7,
 
   likeApi: {
-    base: (env.LIKE_API_URL || 'https://likesystem.squareweb.app').replace(/\/+$/, ''),
-    key: env.LIKE_API_KEY || '',
-  },
-  mp: {
-    accessToken: env.MP_ACCESS_TOKEN || '',
-    webhookSecret: env.MP_WEBHOOK_SECRET || '',
+    base: (env.LIKE_API_URL || 'http://localhost:5001').replace(/\/+$/, ''),
+    key: env.LIKE_API_KEY || 'DRIFT',
   },
   admin: {
     username: env.ADMIN_USER || 'ADMIN',
     password: env.ADMIN_PASSWORD || 'LELEO',
   },
-
-  // Regras do produto
-  likesPerDay: 2000, // a API aceita até 2.000 likes por dia em cada ID
-  maxPerSend: 2000,
-  pixExpiryMinutes: 30,
-  deliveryRetryMinutes: 10,
-  deliveryMaxAttempts: 12,
 };
 
 export const UID_RE = /^\d{6,12}$/;
+
+// Regiões aceitas pela API (server_name)
+export const SERVERS = [
+  { code: 'BR', label: 'Brasil' },
+  { code: 'IND', label: 'Índia' },
+  { code: 'US', label: 'Estados Unidos' },
+  { code: 'SAC', label: 'América do Sul' },
+  { code: 'NA', label: 'América do Norte' },
+  { code: 'BD', label: 'Bangladesh' },
+  { code: 'RU', label: 'Rússia' },
+];
+export const SERVER_CODES = SERVERS.map((s) => s.code);

@@ -1,6 +1,8 @@
-import { api, $, $$, brl, num, esc, when, badge, toast, busy } from './common.js';
+import { api, $, $$, num, esc, when, badge, toast, busy } from './common.js';
 
-const state = { tab: 'overview', settings: null };
+const state = { tab: 'overview', settings: null, allServers: [] };
+const SEND_STATUS = { ok: ['Com likes', 'ok'], nochange: ['Sem alteração', 'warn'], error: ['Falhou', 'bad'], pending: ['Em andamento', 'info'] };
+const sbadge = (s) => { const [l, c] = SEND_STATUS[s] || [s, 'muted']; return `<span class="badge ${c}">${l}</span>`; };
 
 // ---------- login ----------
 async function boot() {
@@ -26,7 +28,7 @@ $('#formLogin').addEventListener('submit', async (e) => {
 $('#btnLogout').addEventListener('click', async () => { await api('/admin/api/logout', { method: 'POST', body: {} }); showLogin(); });
 
 // ---------- abas ----------
-const loaders = { overview: loadOverview, orders: loadOrders, deliveries: loadDeliveries, send: () => {}, settings: loadSettings };
+const loaders = { overview: loadOverview, sends: loadSends, send: loadSendTab, settings: loadSettings };
 function openTab(name) {
   state.tab = name;
   $$('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
@@ -35,125 +37,85 @@ function openTab(name) {
 }
 $$('.tabs button').forEach((b) => b.addEventListener('click', () => openTab(b.dataset.tab)));
 function fail(err) { if (err.status === 401) showLogin(); else toast(err.message, 'bad'); }
-const confirmAction = (msg) => window.confirm(msg);
+
+async function ensureSettings() {
+  if (!state.settings) { const r = await api('/admin/api/settings'); state.settings = r.settings; state.allServers = r.allServers; }
+  return state.settings;
+}
+const serverOptions = (codes, selected) => codes.map((c) => { const s = state.allServers.find((x) => x.code === c) || { code: c, label: c }; return `<option value="${c}" ${c === selected ? 'selected' : ''}>${esc(s.label)} (${c})</option>`; }).join('');
 
 // ---------- visão geral ----------
 async function loadOverview(refresh = false) {
   const o = await api(`/admin/api/overview${refresh ? '?refresh=1' : ''}`);
-  $('#modeTag').textContent = o.mock ? 'MODO SIMULADO' : `PIX: ${o.provider}`;
+  $('#modeTag').textContent = o.mock ? 'MODO SIMULADO' : o.apiUrl;
   const alerts = [];
-  if (o.mock) alerts.push(['warn', 'Modo simulado ativo (MOCK=1): nenhum like real é enviado e o PIX é fictício.']);
-  if (!o.apiReady) alerts.push(['bad', 'LIKE_API_KEY não configurada: os envios vão falhar.']);
-  if (!o.paymentsReady) alerts.push(['bad', 'MP_ACCESS_TOKEN não configurado: o site não consegue gerar PIX.']);
-  if (o.failed) alerts.push(['bad', `${o.failed} envio(s) falharam e precisam de reenvio (aba Envios).`]);
-  if (o.balanceError) alerts.push(['warn', `Saldo da API indisponível: ${o.balanceError}`]);
+  if (o.mock) alerts.push(['warn', 'Modo simulado ativo (MOCK=1): nenhum like real é enviado.']);
+  if (o.apiError) alerts.push(['bad', `API de likes fora do ar: ${o.apiError}`]);
+  if (!o.publicSend) alerts.push(['warn', 'Envio pelo site desativado: visitantes só consultam.']);
+  if (o.api && o.api.remains <= 5) alerts.push(['warn', `Limite diário da API quase no fim (${o.api.remains} restantes).`]);
   $('#alerts').innerHTML = alerts.map(([k, t]) => `<div class="alert ${k}">${esc(t)}</div>`).join('');
-  const c = o.counts;
   $('#tiles').innerHTML = [
-    ['Vendas hoje', brl(o.today.amount), `${o.today.count} pedido(s)`],
-    ['Likes enviados hoje', num(o.today.likes), ''],
-    ['Total vendido', brl(o.total.amount), `${o.total.count} pedido(s) pagos`],
-    ['Likes enviados (total)', num(o.total.likes), ''],
-    ['Na fila', num(o.queued), 'envios agendados'],
-    ['Aguardando PIX', num(c.pending || 0), `${num(c.expired || 0)} expirados`],
+    ['Likes enviados hoje', `+${num(o.today.likes)}`, `${o.today.ok} de ${o.today.count} envio(s) com likes`],
+    ['Likes enviados (total)', `+${num(o.total.likes)}`, `${num(o.total.count)} envio(s)`],
+    ['IDs atendidos', num(o.total.uids), 'perfis que receberam likes'],
+    ['Falhas', num(o.counts.error || 0), `${num(o.counts.nochange || 0)} sem alteração`],
+    ['Limite da API hoje', o.api ? `${o.api.remains}/${o.api.keyLimit}` : '—', 'envios restantes'],
   ].map(([l, v, s]) => `<div class="tile glass"><span>${l}</span><strong>${v}</strong>${s ? `<small>${esc(s)}</small>` : ''}</div>`).join('');
-  const max = Math.max(1, ...o.days.map((d) => d.amount));
-  $('#bars').innerHTML = o.days.map((d) => `<div title="${d.day}: ${brl(d.amount)} (${d.count})"><i style="height:${Math.round((d.amount / max) * 100)}%"></i><b>${d.day.slice(8)}/${d.day.slice(5, 7)}</b></div>`).join('');
-  const b = o.balance;
-  $('#balance').innerHTML = b ? [
-    ['Likes disponíveis', num(b.remaining)],
-    ['Plano', esc(b.plan_type || '—')],
-    ['Estoque total', b.stock_limit ? num(b.stock_limit) : '—'],
-    ['Usados hoje', b.daily_limit ? `${num(b.used_today)} / ${num(b.daily_limit)}` : num(b.used_today || 0)],
-    ['Validade', esc(b.expiry_date || '—')],
-  ].map(([k, v]) => `<div><span>${k}</span><strong>${v}</strong></div>`).join('') : `<p class="muted">${esc(o.balanceError || 'Sem dados.')}</p>`;
+  const max = Math.max(1, ...o.days.map((d) => d.likes));
+  $('#bars').innerHTML = o.days.map((d) => `<div title="${d.day}: +${num(d.likes)} likes (${d.count} envios)"><i style="height:${Math.round((d.likes / max) * 100)}%"></i><b>${d.day.slice(8)}/${d.day.slice(5, 7)}</b></div>`).join('');
+  const a = o.api;
+  $('#apiStatus').innerHTML = a ? [
+    ['Situação', '<span class="badge ok">online</span>'],
+    ['No ar há', `${Math.floor(a.uptime / 3600)}h ${Math.floor((a.uptime % 3600) / 60)}min`],
+    ['Tokens em cache', num(a.cachedTokens)],
+    ['Envios restantes hoje', `${a.remains} / ${a.keyLimit}`],
+  ].map(([k, v]) => `<div><span>${k}</span><strong>${v}</strong></div>`).join('') : `<div><span>Situação</span><strong><span class="badge bad">offline</span></strong></div><p class="muted small">${esc(o.apiError || '')}</p>`;
+  $('#regionsTable tbody').innerHTML = a ? Object.entries(a.regions).map(([code, r]) => {
+    const pct = r.accounts ? Math.round((r.valid / r.accounts) * 100) : 0;
+    const health = !r.accounts ? '<span class="badge muted">sem contas</span>' : pct >= 70 ? `<span class="badge ok">${pct}%</span>` : pct > 0 ? `<span class="badge warn">${pct}%</span>` : '<span class="badge bad">0%</span>';
+    return `<tr><td><b>${code}</b></td><td>${num(r.accounts)}</td><td>${num(r.valid)}</td><td>${health}</td></tr>`;
+  }).join('') : '<tr><td colspan="4" class="empty">API indisponível.</td></tr>';
 }
 $('#btnRefresh').addEventListener('click', () => loadOverview(true).catch(fail));
-
-// ---------- pedidos ----------
-async function loadOrders() {
-  const status = $('#orderStatus').value;
-  const q = $('#orderSearch').value.trim();
-  const { orders, total } = await api(`/admin/api/orders?status=${encodeURIComponent(status)}&q=${encodeURIComponent(q)}`);
-  const tb = $('#ordersTable tbody');
-  if (!orders.length) { tb.innerHTML = `<tr><td colspan="8" class="empty">Nenhum pedido.</td></tr>`; return; }
-  tb.innerHTML = orders.map((o) => {
-    const sent = o.deliveries.filter((d) => d.status === 'sent').length;
-    const actions = [`<a class="btn" href="/pedido/${o.code}" target="_blank" rel="noopener">Abrir</a>`];
-    if (o.status === 'pending' || o.status === 'expired') actions.push(`<button class="btn btn-primary" data-confirm="${o.code}">Confirmar pago</button>`, `<button class="btn" data-cancel="${o.code}">Cancelar</button>`);
-    return `<tr>
-      <td><b>${o.code}</b>${o.paidBy === 'manual' ? ' <span class="muted small">(manual)</span>' : ''}</td>
-      <td>${esc(o.nickname || '—')}<br><span class="muted small">${o.uid}${o.contact ? ` · ${esc(o.contact)}` : ''}</span></td>
-      <td>${esc(o.plan.name)}</td><td>${o.amount}</td><td>${badge(o.status)}</td>
-      <td>${o.deliveries.length ? `${sent}/${o.deliveries.length}` : '—'}</td>
-      <td>${when(o.createdAt)}</td><td>${actions.join('')}</td></tr>`;
-  }).join('') + (total > orders.length ? `<tr><td colspan="8" class="empty">Mostrando ${orders.length} de ${total}. Use a busca para refinar.</td></tr>` : '');
-}
-$('#orderStatus').addEventListener('change', () => loadOrders().catch(fail));
-let searchTimer;
-$('#orderSearch').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadOrders().catch(fail), 300); });
-$('#ordersTable').addEventListener('click', async (e) => {
-  const c = e.target.closest('[data-confirm]');
-  const x = e.target.closest('[data-cancel]');
-  try {
-    if (c && confirmAction(`Confirmar o pagamento do pedido ${c.dataset.confirm} manualmente? Os envios começam na hora.`)) {
-      busy(c, true, '…');
-      await api(`/admin/api/orders/${c.dataset.confirm}/confirm`, { method: 'POST', body: {} });
-      toast('Pedido confirmado. Envios na fila.');
-      await loadOrders();
-    } else if (x && confirmAction(`Cancelar o pedido ${x.dataset.cancel}?`)) {
-      await api(`/admin/api/orders/${x.dataset.cancel}/cancel`, { method: 'POST', body: {} });
-      toast('Pedido cancelado.');
-      await loadOrders();
-    }
-  } catch (err) { fail(err); }
+$('#btnResetLimit').addEventListener('click', async () => {
+  if (!window.confirm('Zerar o contador diário de envios da API para este servidor?')) return;
+  try { await api('/admin/api/reset-limit', { method: 'POST', body: {} }); toast('Limite zerado.'); await loadOverview(true); } catch (err) { fail(err); }
 });
 
 // ---------- envios ----------
-async function loadDeliveries() {
-  const status = $('#deliveryStatus').value;
-  const { deliveries, total } = await api(`/admin/api/deliveries?status=${encodeURIComponent(status)}`);
-  const tb = $('#deliveriesTable tbody');
-  if (!deliveries.length) { tb.innerHTML = `<tr><td colspan="9" class="empty">Nenhum envio.</td></tr>`; return; }
-  tb.innerHTML = deliveries.map((d) => {
-    const actions = [];
-    if (d.status === 'failed' || d.status === 'queued') actions.push(`<button class="btn btn-primary" data-retry="${d.id}">${d.status === 'failed' ? 'Reenviar' : 'Enviar agora'}</button>`);
-    if (d.status === 'queued') actions.push(`<button class="btn" data-cancel="${d.id}">Cancelar</button>`);
-    return `<tr>
-      <td>${d.id}</td>
-      <td>${d.uid}<br><span class="muted small">${esc(d.nickname || '')}</span></td>
-      <td>${d.code ? `<a href="/pedido/${d.code}" target="_blank" rel="noopener"><b>${d.code}</b></a>` : '<span class="muted">manual</span>'}</td>
-      <td>${d.day}</td><td>${d.status === 'sent' ? num(d.likesSent) : num(d.amount)}</td><td>${badge(d.status)}</td>
-      <td>${d.status === 'sent' ? when(d.sentAt) : d.status === 'queued' ? `previsto ${when(d.dueAt)}` : when(d.createdAt)}</td>
-      <td class="wrap-text">${esc(d.error || '')}${d.attempts > 1 ? ` <span class="small">(${d.attempts} tentativas)</span>` : ''}</td>
-      <td>${actions.join('')}</td></tr>`;
-  }).join('') + (total > deliveries.length ? `<tr><td colspan="9" class="empty">Mostrando ${deliveries.length} de ${total}.</td></tr>` : '');
+async function loadSends() {
+  const status = $('#sendStatus').value;
+  const q = $('#sendSearch').value.trim();
+  const { sends, total } = await api(`/admin/api/sends?status=${encodeURIComponent(status)}&q=${encodeURIComponent(q)}`);
+  const tb = $('#sendsTable tbody');
+  if (!sends.length) { tb.innerHTML = `<tr><td colspan="9" class="empty">Nenhum envio.</td></tr>`; return; }
+  tb.innerHTML = sends.map((s) => `<tr>
+      <td>${s.id}</td>
+      <td>${s.uid}<br><span class="muted small">${esc(s.nickname || '')}</span></td>
+      <td>${esc(s.server)}</td>
+      <td>${s.before != null ? `${num(s.before)} → ${num(s.after)}` : '—'}</td>
+      <td><b>${s.given ? `+${num(s.given)}` : '0'}</b>${s.tokensUsed ? `<br><span class="muted small">${num(s.tokensUsed)} contas</span>` : ''}</td>
+      <td>${sbadge(s.status)}</td>
+      <td>${s.by === 'admin' ? 'painel' : 'site'}</td>
+      <td>${when(s.at)}${s.elapsed ? `<br><span class="muted small">${s.elapsed.toFixed(1)}s</span>` : ''}</td>
+      <td class="wrap-text">${esc(s.error || '')}</td></tr>`).join('') + (total > sends.length ? `<tr><td colspan="9" class="empty">Mostrando ${sends.length} de ${total}. Use a busca para refinar.</td></tr>` : '');
 }
-$('#deliveryStatus').addEventListener('change', () => loadDeliveries().catch(fail));
-$('#deliveriesTable').addEventListener('click', async (e) => {
-  const r = e.target.closest('[data-retry]');
-  const x = e.target.closest('[data-cancel]');
-  try {
-    if (r) {
-      busy(r, true, 'Enviando…');
-      const { delivery } = await api(`/admin/api/deliveries/${r.dataset.retry}/retry`, { method: 'POST', body: {} });
-      toast(delivery.status === 'sent' ? `Enviado: ${num(delivery.likesSent)} likes.` : `Não enviado: ${delivery.error}`, delivery.status === 'sent' ? 'ok' : 'warn');
-      await loadDeliveries();
-    } else if (x && confirmAction('Cancelar esse envio? O cliente não receberá esse dia.')) {
-      await api(`/admin/api/deliveries/${x.dataset.cancel}/cancel`, { method: 'POST', body: {} });
-      await loadDeliveries();
-    }
-  } catch (err) { fail(err); }
-});
+$('#sendStatus').addEventListener('change', () => loadSends().catch(fail));
+let searchTimer;
+$('#sendSearch').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadSends().catch(fail), 300); });
 
 // ---------- envio manual ----------
+async function loadSendTab() {
+  const s = await ensureSettings();
+  if (!$('#sendServer').options.length) $('#sendServer').innerHTML = serverOptions(s.servers, s.defaultServer);
+}
 $('#btnSendCheck').addEventListener('click', async () => {
   const uid = $('#sendUid').value.replace(/\D/g, '');
   const box = $('#sendPlayer');
   busy($('#btnSendCheck'), true, '…');
   try {
-    const { player, usedToday } = await api(`/admin/api/player/${uid}`);
-    box.innerHTML = `<div class="info"><strong>${esc(player.nickname)}</strong><span class="muted">ID ${player.uid}${player.level ? ` · Nível ${player.level}` : ''} · ${num(player.likes)} likes · hoje já recebeu ${num(usedToday)}</span></div>`;
+    const { player, receivedToday, totalGiven } = await api(`/admin/api/player?uid=${uid}&server=${$('#sendServer').value}`);
+    box.innerHTML = `<div class="info"><strong>${esc(player.nickname)}</strong><span class="muted">ID ${player.uid}${player.level ? ` · Nível ${player.level}` : ''} · ${num(player.likes)} likes · +${num(totalGiven)} pelo site${receivedToday ? ' · já recebeu hoje' : ''}</span></div>`;
     box.hidden = false;
   } catch (err) { box.innerHTML = `<p class="error">${esc(err.message)}</p>`; box.hidden = false; }
   finally { busy($('#btnSendCheck'), false); }
@@ -161,62 +123,50 @@ $('#btnSendCheck').addEventListener('click', async () => {
 $('#formSend').addEventListener('submit', async (e) => {
   e.preventDefault();
   const uid = $('#sendUid').value.replace(/\D/g, '');
-  const amount = Number($('#sendAmount').value);
-  if (!confirmAction(`Enviar ${num(amount)} likes para o ID ${uid}?`)) return;
+  const server = $('#sendServer').value;
+  if (!window.confirm(`Enviar likes para o ID ${uid} (${server})?`)) return;
   busy($('#btnSend'), true, 'Enviando…');
+  $('#sendResult').innerHTML = '';
   try {
-    const { delivery } = await api('/admin/api/send', { method: 'POST', body: { uid, amount } });
-    $('#sendResult').innerHTML = `<div class="alert" style="margin-top:14px;border-color:rgba(48,212,127,.4);background:rgba(48,212,127,.1);color:var(--ok)">Enviados ${num(delivery.likesSent)} likes para ${esc(delivery.nickname || uid)}.</div>`;
+    const { send } = await api('/admin/api/send', { method: 'POST', body: { uid, server } });
+    $('#sendResult').innerHTML = send.status === 'ok'
+      ? `<div class="alert" style="margin-top:14px;border-color:rgba(48,212,127,.4);background:rgba(48,212,127,.1);color:var(--ok)">+${num(send.given)} likes para ${esc(send.nickname || uid)} · ${num(send.before)} → ${num(send.after)} · ${num(send.tokensUsed)} contas em ${send.elapsed.toFixed(1)}s${send.remains != null ? ` · restam ${send.remains} envios hoje` : ''}</div>`
+      : `<div class="alert" style="margin-top:14px">${esc(send.error || 'Sem alteração nos likes.')} (${num(send.before)} → ${num(send.after)})</div>`;
   } catch (err) {
     $('#sendResult').innerHTML = `<div class="alert bad" style="margin-top:14px">${esc(err.message)}</div>`;
   } finally { busy($('#btnSend'), false); }
 });
 
 // ---------- configurações ----------
-function planRow(p = { id: '', name: '', days: 1, priceCents: 990, tag: '', description: '', active: true }) {
-  return `<tr>
-    <td><input type="checkbox" data-f="active" ${p.active ? 'checked' : ''}></td>
-    <td><input data-f="id" value="${esc(p.id)}" maxlength="20" placeholder="2k"></td>
-    <td><input data-f="name" value="${esc(p.name)}" maxlength="40" placeholder="2K Likes"></td>
-    <td><input data-f="days" type="number" min="1" max="365" value="${p.days}"></td>
-    <td><input data-f="price" type="number" min="1" step="0.01" value="${(p.priceCents / 100).toFixed(2)}"></td>
-    <td><input data-f="tag" value="${esc(p.tag || '')}" maxlength="20" placeholder="Mais vendido"></td>
-    <td><input data-f="description" value="${esc(p.description || '')}" maxlength="140"></td>
-    <td><button class="btn" type="button" data-remove>Remover</button></td></tr>`;
-}
 async function loadSettings() {
-  const { settings } = await api('/admin/api/settings');
-  state.settings = settings;
-  $('#sSiteName').value = settings.siteName;
-  $('#sWhatsapp').value = settings.whatsapp || '';
-  $('#sTagline').value = settings.tagline || '';
-  $('#sNotice').value = settings.notice || '';
-  $('#plansTable tbody').innerHTML = settings.plans.map(planRow).join('');
+  state.settings = null;
+  const s = await ensureSettings();
+  $('#sSiteName').value = s.siteName;
+  $('#sWhatsapp').value = s.whatsapp || '';
+  $('#sTagline').value = s.tagline || '';
+  $('#sNotice').value = s.notice || '';
+  $('#sPublicSend').checked = Boolean(s.publicSend);
+  $('#sDefaultServer').innerHTML = serverOptions(state.allServers.map((x) => x.code), s.defaultServer);
+  $('#sServers').innerHTML = state.allServers.map((x) => `<label class="opt"><input type="checkbox" value="${x.code}" ${s.servers.includes(x.code) ? 'checked' : ''}> <span>${esc(x.label)} (${x.code})</span></label>`).join('');
   const o = await api('/admin/api/overview');
   $('#integrations').innerHTML = [
-    ['API de likes', o.apiReady ? '<span class="badge ok">configurada</span>' : '<span class="badge bad">falta LIKE_API_KEY</span>'],
-    ['PIX (Mercado Pago)', o.paymentsReady ? `<span class="badge ok">${esc(o.provider)}</span>` : '<span class="badge bad">falta MP_ACCESS_TOKEN</span>'],
-    ['Webhook', `<code>${esc(location.origin)}/webhooks/mercadopago</code>`],
+    ['API de likes', o.mock ? '<span class="badge warn">simulada</span>' : o.api ? '<span class="badge ok">online</span>' : '<span class="badge bad">offline</span>'],
+    ['Endereço', `<code>${esc(o.apiUrl)}</code>`],
+    ['Envio pelo site', o.publicSend ? '<span class="badge ok">ativo</span>' : '<span class="badge muted">desativado</span>'],
   ].map(([k, v]) => `<div><span>${k}</span><strong>${v}</strong></div>`).join('');
 }
-$('#btnAddPlan').addEventListener('click', () => $('#plansTable tbody').insertAdjacentHTML('beforeend', planRow()));
-$('#plansTable').addEventListener('click', (e) => { const b = e.target.closest('[data-remove]'); if (b) b.closest('tr').remove(); });
-$('#btnResetPlans').addEventListener('click', async () => {
-  if (!confirmAction('Restaurar os planos padrão (2K, 7 dias, 30 dias)?')) return;
-  try { await api('/admin/api/settings/reset-plans', { method: 'POST', body: {} }); await loadSettings(); toast('Planos restaurados.'); } catch (err) { fail(err); }
-});
 $('#formSettings').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const plans = $$('#plansTable tbody tr').map((tr) => {
-    const f = (n) => tr.querySelector(`[data-f="${n}"]`);
-    return { active: f('active').checked, id: f('id').value, name: f('name').value, days: Number(f('days').value), priceCents: Math.round(Number(f('price').value) * 100), tag: f('tag').value, description: f('description').value };
-  });
-  const body = { siteName: $('#sSiteName').value, whatsapp: $('#sWhatsapp').value, tagline: $('#sTagline').value, notice: $('#sNotice').value, plans };
+  const body = {
+    siteName: $('#sSiteName').value, whatsapp: $('#sWhatsapp').value, tagline: $('#sTagline').value, notice: $('#sNotice').value,
+    publicSend: $('#sPublicSend').checked, defaultServer: $('#sDefaultServer').value, servers: $$('#sServers input:checked').map((i) => i.value),
+  };
   $('#settingsError').hidden = true;
   busy(e.submitter, true, 'Salvando…');
   try {
     await api('/admin/api/settings', { method: 'PUT', body });
     toast('Configurações salvas.');
+    $('#sendServer').innerHTML = '';
     await loadSettings();
   } catch (err) {
     $('#settingsError').textContent = err.message;

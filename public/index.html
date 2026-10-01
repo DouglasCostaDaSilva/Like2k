@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Like2k — 2.000 likes no Free Fire</title>
-  <meta name="description" content="Like2k: 2.000 likes no seu perfil do Free Fire em minutos. Digite o ID, pague no PIX e receba automaticamente." />
+  <title>Like2k — Acompanhe seus likes no Free Fire</title>
+  <meta name="description" content="Like2k: consulte os likes do seu perfil do Free Fire, veja o histórico e receba mais likes com um clique." />
   <meta name="theme-color" content="#07070c" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -24,9 +24,8 @@
     <button class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false"><i></i><i></i><i></i></button>
     <div class="nav-links" id="navLinks">
       <a href="#como-funciona">Como funciona</a>
-      <a href="#planos">Planos</a>
-      <a href="#acompanhar">Meu pedido</a>
-      <a href="#comprar" class="btn btn-primary btn-sm">Comprar likes</a>
+      <a href="#faq">Dúvidas</a>
+      <a href="#acompanhar" class="btn btn-primary btn-sm">Consultar ID</a>
     </div>
   </nav>
 
@@ -36,83 +35,72 @@
     <section class="hero" id="topo">
       <div class="wrap hero-grid">
         <div class="hero-copy reveal">
-          <span class="eyebrow">Free Fire · Likes automáticos</span>
-          <h1><span class="grad">2K LIKES</span><br />no seu perfil<br /><span class="thin">em minutos.</span></h1>
-          <p class="lead" id="tagline">Digite o seu ID, pague no PIX e receba 2.000 likes automaticamente. Sem login, sem senha, sem enrolação.</p>
+          <span class="eyebrow">Free Fire · Acompanhamento de likes</span>
+          <h1><span class="grad">SEUS LIKES</span><br />em tempo real<br /><span class="thin">no Free Fire.</span></h1>
+          <p class="lead" id="tagline">Digite o seu ID, veja quantos likes o perfil tem agora, acompanhe o histórico e receba mais com um clique.</p>
           <div class="hero-cta">
-            <a href="#comprar" class="btn btn-primary btn-lg">Comprar agora
+            <a href="#acompanhar" class="btn btn-primary btn-lg">Consultar meu ID
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
             </a>
-            <a href="#planos" class="btn btn-lg">Ver planos</a>
+            <a href="#como-funciona" class="btn btn-lg">Como funciona</a>
           </div>
           <div class="hero-stats">
-            <div class="stat-chip glass"><strong id="heroPrice">R$ 9,90</strong><span>por 2.000 likes</span></div>
-            <div class="stat-chip glass"><strong>PIX</strong><span>envio automático</span></div>
-            <div class="stat-chip glass"><strong>2K/dia</strong><span>em cada ID</span></div>
+            <div class="stat-chip glass"><strong>Grátis</strong><span>consulta na hora</span></div>
+            <div class="stat-chip glass"><strong>Sem senha</strong><span>só o ID público</span></div>
+            <div class="stat-chip glass"><strong>1x/dia</strong><span>likes por ID</span></div>
           </div>
         </div>
         <div class="hero-art reveal" aria-hidden="true">
           <div class="orb"></div>
           <div class="heart-big">
             <svg viewBox="0 0 64 64"><path d="M32 54s-20-12-20-26.5C12 19.5 17.8 14 24.5 14c3.8 0 6.3 1.9 7.5 3.8 1.2-1.9 3.7-3.8 7.5-3.8C46.2 14 52 19.5 52 27.5 52 42 32 54 32 54z" fill="url(#hg)"/><defs><linearGradient id="hg" x1="0" y1="0" x2="64" y2="64"><stop stop-color="#ffb347"/><stop offset="1" stop-color="#ff2d55"/></linearGradient></defs></svg>
-            <span class="counter" id="heroCounter">+2.000</span>
+            <span class="counter" id="heroCounter">+0</span>
           </div>
-          <div class="float f1 glass"><b>+2.000</b> likes enviados</div>
-          <div class="float f2 glass"><b>PIX</b> confirmado</div>
+          <div class="float f1 glass"><b>Antes</b> 28.394</div>
+          <div class="float f2 glass"><b>Depois</b> 28.499</div>
           <div class="float f3 glass"><b>ID</b> verificado</div>
         </div>
       </div>
     </section>
 
-    <section class="section" id="comprar">
+    <section class="section" id="acompanhar">
       <div class="wrap">
         <div class="section-head reveal">
-          <span class="eyebrow">Comprar</span>
-          <h2>Três passos e <span class="grad">pronto.</span></h2>
+          <span class="eyebrow">Acompanhar</span>
+          <h2>Consulte o seu <span class="grad">ID.</span></h2>
         </div>
         <div class="checkout glass reveal">
-          <div class="step" data-step="1">
-            <div class="step-head"><span class="n">1</span><h3>Seu ID do Free Fire</h3></div>
+          <div class="step">
+            <div class="step-head"><span class="n">1</span><h3>ID e região</h3></div>
             <form class="row" id="formUid" autocomplete="off">
-              <input type="text" inputmode="numeric" pattern="[0-9]*" id="uid" placeholder="Ex.: 123456789" maxlength="12" required />
-              <button class="btn btn-primary" id="btnVerify" type="submit">Verificar</button>
+              <input type="text" inputmode="numeric" pattern="[0-9]*" id="uid" placeholder="ID do jogador, ex.: 123456789" maxlength="12" required />
+              <select id="server" aria-label="Região"></select>
+              <button class="btn btn-primary" id="btnVerify" type="submit">Consultar</button>
             </form>
             <p class="hint">O ID fica no seu perfil do jogo, abaixo do nick. Só números.</p>
-            <div class="player" id="player" hidden></div>
+            <p class="error" id="formError" hidden></p>
           </div>
 
-          <div class="step" data-step="2">
-            <div class="step-head"><span class="n">2</span><h3>Escolha o plano</h3></div>
-            <div class="plans compact" id="plansPick"></div>
-          </div>
-
-          <div class="step" data-step="3">
-            <div class="step-head"><span class="n">3</span><h3>Pague no PIX</h3></div>
-            <label class="field">
-              <span>WhatsApp ou e-mail (opcional, para suporte)</span>
-              <input type="text" id="contact" placeholder="(11) 99999-9999" maxlength="80" />
-            </label>
-            <div class="summary">
-              <div><span class="muted">Plano</span><strong id="sumPlan">—</strong></div>
-              <div><span class="muted">Jogador</span><strong id="sumPlayer">—</strong></div>
-              <div><span class="muted">Total</span><strong class="grad big" id="sumTotal">—</strong></div>
+          <div class="step" id="resultStep" hidden>
+            <div class="step-head"><span class="n">2</span><h3>Perfil</h3></div>
+            <div class="player" id="player"></div>
+            <div class="likes-now">
+              <div class="glass"><span class="muted">Likes agora</span><strong class="grad" id="likesNow">—</strong></div>
+              <div class="glass"><span class="muted">Recebidos pelo site</span><strong id="likesGiven">—</strong></div>
+              <div class="glass"><span class="muted">Hoje</span><strong id="todayState">—</strong></div>
             </div>
-            <p class="error" id="checkoutError" hidden></p>
-            <button class="btn btn-primary btn-lg btn-block" id="btnBuy" disabled>Gerar PIX</button>
-            <p class="hint">Depois de pago, os likes começam a ser enviados em até 1 minuto. Você acompanha tudo na página do pedido.</p>
+            <div id="sendBox" hidden>
+              <button class="btn btn-primary btn-lg btn-block" id="btnSend">Receber likes agora</button>
+              <p class="hint">Cada ID pode receber likes uma vez por dia. O envio leva alguns segundos e o resultado aparece aqui.</p>
+            </div>
+            <div class="send-result glass" id="sendResult" hidden></div>
+          </div>
+
+          <div class="step" id="historyStep" hidden>
+            <div class="step-head"><span class="n">3</span><h3>Histórico desse ID</h3></div>
+            <ul class="timeline" id="history"></ul>
           </div>
         </div>
-      </div>
-    </section>
-
-    <section class="section" id="planos">
-      <div class="wrap">
-        <div class="section-head reveal">
-          <span class="eyebrow">Planos</span>
-          <h2>2.000 likes por dia, <span class="grad">do seu jeito.</span></h2>
-          <p class="muted">O Free Fire aceita até 2.000 likes por dia em cada ID. Nos planos por dias, enviamos 2.000 todo dia, automaticamente.</p>
-        </div>
-        <div class="plans" id="plansGrid"></div>
       </div>
     </section>
 
@@ -123,24 +111,9 @@
           <h2>Simples assim.</h2>
         </div>
         <div class="steps-grid">
-          <div class="card glass reveal"><span class="n">01</span><h3>Digite o ID</h3><p>Conferimos o nick antes de qualquer cobrança, para você ter certeza de que é o perfil certo.</p></div>
-          <div class="card glass reveal"><span class="n">02</span><h3>Escolha o plano</h3><p>2K uma vez, ou 2K por dia durante 7 ou 30 dias. Os preços estão sempre atualizados aqui.</p></div>
-          <div class="card glass reveal"><span class="n">03</span><h3>Pague no PIX</h3><p>QR Code e copia-e-cola na hora. O pagamento é confirmado automaticamente, sem mandar comprovante.</p></div>
-          <div class="card glass reveal"><span class="n">04</span><h3>Receba os likes</h3><p>Em até 1 minuto após o PIX os likes entram no perfil. Nos planos por dias, todo dia no mesmo horário.</p></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" id="acompanhar">
-      <div class="wrap narrow">
-        <div class="card glass reveal">
-          <span class="eyebrow">Meu pedido</span>
-          <h3>Acompanhar um pedido</h3>
-          <p class="muted">Digite o código que aparece na página do pedido (ex.: 7KQ2M9XA1B).</p>
-          <form class="row" id="formTrack">
-            <input type="text" id="track" placeholder="Código do pedido" maxlength="12" required />
-            <button class="btn" type="submit">Abrir</button>
-          </form>
+          <div class="card glass reveal"><span class="n">01</span><h3>Digite o ID</h3><p>Escolha a região e consulte. Mostramos o nick e a quantidade de likes do perfil na hora.</p></div>
+          <div class="card glass reveal"><span class="n">02</span><h3>Receba likes</h3><p>Com um clique os likes são enviados. Você vê o antes e o depois e quantos entraram.</p></div>
+          <div class="card glass reveal"><span class="n">03</span><h3>Acompanhe</h3><p>O histórico de cada ID fica salvo: data, likes antes, depois e quantos foram dados em cada envio.</p></div>
         </div>
       </div>
     </section>
@@ -151,11 +124,10 @@
           <span class="eyebrow">Dúvidas</span>
           <h2>Perguntas frequentes</h2>
         </div>
-        <details class="faq glass reveal"><summary>É seguro? Precisa da minha senha?</summary><p>Não. Só precisamos do ID público do seu perfil. Nunca pedimos login, senha ou acesso à conta.</p></details>
-        <details class="faq glass reveal"><summary>Quanto tempo demora para os likes chegarem?</summary><p>Assim que o PIX é confirmado, o envio começa em até 1 minuto. Abra o perfil no jogo e veja o contador subir.</p></details>
-        <details class="faq glass reveal"><summary>Posso receber mais de 2.000 likes no mesmo dia?</summary><p>Não. O jogo limita cada ID a 2.000 likes por dia. Se o ID já recebeu likes hoje, o envio fica para o dia seguinte, automaticamente.</p></details>
-        <details class="faq glass reveal"><summary>Como funcionam os planos por dias?</summary><p>Você paga uma vez e recebe 2.000 likes por dia durante o período. Os envios são agendados sozinhos, sempre no horário do primeiro envio.</p></details>
-        <details class="faq glass reveal"><summary>Paguei e não recebi. E agora?</summary><p>Abra a página do pedido pelo código e veja o status. Se algo falhou, o sistema tenta de novo sozinho. Se precisar, chame o suporte pelo WhatsApp.</p></details>
+        <details class="faq glass reveal"><summary>É seguro? Precisa da minha senha?</summary><p>Não. Só usamos o ID público do perfil. Nunca pedimos login, senha ou acesso à conta.</p></details>
+        <details class="faq glass reveal"><summary>Quantos likes eu recebo?</summary><p>Depende da quantidade de contas disponíveis na região no momento. O resultado exato aparece logo após o envio, com o antes e o depois.</p></details>
+        <details class="faq glass reveal"><summary>Posso pedir de novo no mesmo dia?</summary><p>Não. Cada ID recebe likes uma vez por dia. No dia seguinte é só consultar e pedir de novo.</p></details>
+        <details class="faq glass reveal"><summary>Consultei e deu "ID não encontrado".</summary><p>Confira se digitou só os números do ID e se a região está certa (perfil do Brasil = BR).</p></details>
       </div>
     </section>
   </main>

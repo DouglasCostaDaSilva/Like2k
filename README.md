@@ -1,83 +1,71 @@
 # Like2k
 
-Loja de **likes 2K para Free Fire**: o cliente digita o ID, escolhe o plano, paga no PIX e recebe **2.000 likes automaticamente**. Sem cadastro, sem senha. Painel admin em `/admin`.
+**Source de likes do Free Fire + site de acompanhamento.**
 
-## O que tem
+- `api/` — a source: API em Python (Flask) que envia likes para um perfil usando um pool de contas por região. Endpoint `/like?uid=...&server_name=BR&key=...`.
+- raiz — o site (Node, sem dependências nativas): o jogador consulta o ID, vê nick e likes atuais, pede likes com um clique e acompanha o histórico (antes → depois). Painel `/admin` com status da API por região, envios e configurações.
 
-- **Loja pública** (`/`): verificação do ID (mostra o nick antes de cobrar), planos, PIX com QR Code e copia-e-cola, página do pedido que atualiza sozinha.
-- **Envio automático**: assim que o PIX cai (webhook do Mercado Pago + consulta a cada 15 s), o primeiro envio sai na hora. Planos por dias agendam **2.000 likes por dia**, sempre no horário do pagamento.
-- **Limite do jogo respeitado**: cada ID recebe no máximo 2.000 likes por dia (horário de Brasília). Se o limite já foi usado, o envio passa para o dia seguinte sozinho.
-- **Falhas com retentativa**: a API de likes falhou? Tenta de novo a cada 10 min (até 12x); depois fica "Falhou" para o admin reenviar com um clique.
-- **Painel admin** (`/admin`): vendas de hoje e totais, gráfico de 14 dias, saldo da API, pedidos (confirmar pagamento manual, cancelar), envios (reenviar, enviar agora, cancelar), envio manual de likes e configurações (nome do site, WhatsApp, aviso, planos e preços).
-- **Modo simulado** (`npm run mock`): API de likes e PIX fictícios, com botão "Simular pagamento" na página do pedido. Ideal para testar antes de colocar as chaves.
+```
+api/app.py             API de likes (source) — rotas /like, /info, /status, /reset-limit
+api/account_*.txt      contas por região (UID:SENHA, uma por linha) — NÃO vão para o git
+server.js              rotas do site (consulta, envio, painel)
+src/likeapi.js         cliente da API (+ modo simulado)
+src/sends.js           histórico de envios (antes/depois, 1x por dia por ID)
+public/index.html      site de acompanhamento
+public/admin.html      painel
+```
 
-## Planos padrão (editáveis no painel)
+## 1. Subindo a API (source)
 
-| Plano | Likes | Preço |
-| --- | --- | --- |
-| 2K Likes | 2.000 (uma vez) | R$ 9,90 |
-| 2K por dia · 7 dias | 14.000 | R$ 49,90 |
-| 2K por dia · 30 dias | 60.000 | R$ 149,90 |
+```bash
+cd api
+pip install -r requirements.txt
+# crie os arquivos de contas (um UID:SENHA por linha):
+#   account_br.txt  account_ind.txt  account_bd.txt  account_ru.txt
+API_KEY=SUA_CHAVE PORT=5001 python app.py
+```
 
-## Rodando
+- `API_KEY`: chave exigida em todas as rotas (padrão da source: `DRIFT`). Troque.
+- `KEY_LIMIT`: envios por dia por IP (padrão 100).
+- Os tokens das contas são renovados sozinhos a cada 30 min e salvos em `token_*.json`.
+- Regiões: `IND`, `BR`, `US`, `SAC`, `NA`, `BD`, `RU`. BR/US/SAC/NA usam `account_br.txt`.
+
+Rotas:
+
+| Rota | O que faz |
+| --- | --- |
+| `GET /like?uid=&server_name=&key=` | Envia likes. Devolve `LikesbeforeCommand`, `LikesafterCommand`, `LikesGivenByAPI`, `PlayerNickname`, `tokens_used`, `remains` |
+| `GET /info?uid=&server_name=&key=` | Só consulta: nick, likes atuais, nível (adicionado para o site) |
+| `GET /status?key=` | Contas e tokens válidos por região, limite restante, uptime (adicionado para o site) |
+| `GET /reset-limit?key=` | Zera o limite diário do IP |
+
+Documentação original da source em `api/README.md`.
+
+## 2. Subindo o site
 
 ```bash
 npm install
-cp .env.example .env    # coloque LIKE_API_KEY e MP_ACCESS_TOKEN
-npm start               # http://localhost:3000
+cp .env.example .env     # LIKE_API_URL = onde a API está, LIKE_API_KEY = mesma API_KEY
+npm start                # http://localhost:3000
 ```
 
-Testar sem chaves: `npm run mock`. Requer Node 18.17+. Os dados ficam em `data/db.json` (pedidos, envios, configurações). Faça backup dessa pasta.
+Testar o site sem a API: `npm run mock` (likes e perfis simulados).
 
-Login do painel: usuário `ADMIN`, senha `LELEO` (troque com `ADMIN_USER` / `ADMIN_PASSWORD` no `.env`).
+Login do painel: `ADMIN` / `LELEO` (troque com `ADMIN_USER` / `ADMIN_PASSWORD`). Dados em `data/db.json`.
 
 ### Square Cloud
 
-O arquivo `squarecloud.app` já está pronto. Suba o projeto (sem `node_modules`), configure as variáveis do `.env` no painel da Square e use o domínio gerado como `PUBLIC_URL`.
+Dois apps: a pasta `api/` (tem `squarecloud.app` próprio, `MAIN=app.py`) e a raiz (site, `MAIN=server.js`). No site, aponte `LIKE_API_URL` para o domínio da API.
 
-## Configurando
+## O que o site faz
 
-### API de likes
-
-`LIKE_API_URL` e `LIKE_API_KEY`: API no formato LikeSystem (`POST /api/likes/send` com `target_id` e `amount`, `GET /api/balance`, `GET /api/player/{uid}`), autenticada pelo header `X-Api-Key`. A chave nunca vai para o navegador.
-
-### PIX (Mercado Pago)
-
-1. Em [Suas integrações](https://www.mercadopago.com.br/developers/panel/app) crie um aplicativo e copie o **Access Token de produção** para `MP_ACCESS_TOKEN`.
-2. Em **Webhooks**, cadastre `https://SEU-DOMINIO/webhooks/mercadopago` com o evento *Pagamentos* e copie a **assinatura secreta** para `MP_WEBHOOK_SECRET`.
-3. `PUBLIC_URL` precisa ser o endereço **https** público do site (o Mercado Pago só chama webhooks https). Sem webhook o site ainda funciona: ele consulta os PIX pendentes a cada 15 s.
-4. Em produção, use `SECURE_COOKIES=1`.
-
-O PIX expira em 30 minutos. Pedidos não pagos ficam como "Expirado" e podem ser confirmados manualmente pelo admin se o cliente pagar depois.
-
-## Estrutura
-
-```
-server.js            rotas (loja, webhook, painel)
-src/config.js        variáveis de ambiente e regras (2.000 likes/dia)
-src/db.js            banco JSON com escrita atômica
-src/auth.js          login do admin, sessão, proteção contra força bruta
-src/likeapi.js       cliente da API de likes (+ modo simulado)
-src/payments.js      PIX no Mercado Pago (+ modo simulado)
-src/orders.js        pedidos, fila de envios diários, retentativas, rotina de fundo
-public/index.html    loja
-public/pedido.html   página do pedido (/pedido/CODIGO)
-public/admin.html    painel (/admin)
-```
-
-## API da loja
-
-| Método | Rota | O que faz |
-| --- | --- | --- |
-| GET | `/api/config` | Nome, planos ativos, WhatsApp, aviso |
-| GET | `/api/player/{uid}` | Nick, nível, likes do perfil e quanto ainda cabe hoje |
-| POST | `/api/orders` | `{ uid, planId, contact? }` → cria pedido e PIX |
-| GET | `/api/orders/{codigo}` | Status do pedido e envios (`?sync=1` consulta o PIX na hora) |
-| POST | `/webhooks/mercadopago` | Notificação do Mercado Pago (assinatura validada) |
+- **Consulta** (`/`): ID + região → nick, likes agora, total recebido pelo site e se já recebeu hoje.
+- **Receber likes**: botão no próprio resultado (pode ser desligado no painel). Um envio por dia por ID; o resultado mostra `+N`, antes → depois.
+- **Histórico** por ID: cada envio com data, região, antes, depois e likes dados.
+- **Painel** (`/admin`): likes enviados hoje/total, IDs atendidos, gráfico de 14 dias, status da API (online, uptime, tokens em cache, limite restante) e saúde por região (contas × tokens válidos), lista de envios com filtros, envio manual, zerar limite da API, configurações (nome, WhatsApp, aviso, envio público, regiões ativas e padrão).
 
 ## Segurança
 
-- Chaves só no servidor; o navegador nunca vê a API Key nem o Access Token.
-- Sessão do admin em cookie `HttpOnly; SameSite=Strict`; alterações só em JSON (bloqueia CSRF).
-- Bloqueio de 10 min após 5 senhas erradas; limite de requisições por IP na verificação de ID e na criação de pedidos.
-- Código do pedido aleatório (10 caracteres): só quem tem o link acompanha.
+- A chave da API fica só no servidor do site; o navegador nunca a vê.
+- Contas (`account_*.txt`) e tokens (`token_*.json`) ficam fora do git (`api/.gitignore`).
+- Sessão do admin em cookie `HttpOnly; SameSite=Strict`; alterações só em JSON; bloqueio após 5 senhas erradas; limite de requisições por IP na consulta e no envio.

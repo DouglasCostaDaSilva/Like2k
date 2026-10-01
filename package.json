@@ -1,7 +1,7 @@
 {
   "name": "like2k",
   "version": "1.0.0",
-  "description": "Like2k — loja de likes 2K para Free Fire com PIX automático",
+  "description": "Like2k — site de acompanhamento da API de likes Free Fire",
   "private": true,
   "type": "module",
   "main": "server.js",
@@ -12,7 +12,6 @@
   },
   "engines": { "node": ">=18.17" },
   "dependencies": {
-    "express": "^5.2.1",
-    "qrcode": "^1.5.4"
+    "express": "^5.2.1"
   }
 }

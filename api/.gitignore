@@ -1,0 +1,5 @@
+# contas e tokens ficam só no servidor
+account_*.txt
+token_*.json
+__pycache__/
+*.pyc

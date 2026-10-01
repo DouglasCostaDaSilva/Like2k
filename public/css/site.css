@@ -205,3 +205,22 @@ textarea { resize: vertical; font-size: .85rem; font-family: ui-monospace, monos
   .float { font-size: .85rem; }
   .heart-big { width: 200px; height: 200px; }
 }
+
+/* ---------- acompanhamento ---------- */
+.row select { flex: 0 0 200px; }
+.likes-now { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
+.likes-now > div { padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.likes-now strong { font-family: var(--font-head); font-size: 1.4rem; }
+.likes-now .muted { font-size: .85rem; }
+.send-result { margin-top: 16px; padding: 22px; text-align: center; }
+.big-result span { font-family: var(--font-head); font-size: 3rem; font-weight: 900; display: block; }
+.big-result p { margin: 4px 0 14px; color: var(--muted); }
+.before-after { display: flex; justify-content: center; align-items: center; gap: 24px; }
+.before-after > div { display: flex; flex-direction: column; }
+.before-after strong { font-family: var(--font-head); font-size: 1.3rem; }
+.before-after .arrow { color: var(--fire-2); font-size: 1.6rem; }
+@media (max-width: 720px) {
+  .row select { flex: 1; }
+  .likes-now { grid-template-columns: 1fr; }
+  .player .badge { width: 100%; justify-content: center; }
+}

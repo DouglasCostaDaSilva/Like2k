@@ -32,8 +32,7 @@
       <a href="/" class="logo"><svg viewBox="0 0 64 64"><path d="M32 50s-16-9.6-16-21.2C16 22.4 20.6 18 26 18c3 0 5 1.5 6 3 1-1.5 3-3 6-3 5.4 0 10 4.4 10 10.8C48 40.4 32 50 32 50z" fill="#ff6a3d"/></svg><span>LIKE<b>2K</b></span></a>
       <nav class="tabs">
         <button data-tab="overview" class="active">Visão geral</button>
-        <button data-tab="orders">Pedidos</button>
-        <button data-tab="deliveries">Envios</button>
+        <button data-tab="sends">Envios</button>
         <button data-tab="send">Enviar likes</button>
         <button data-tab="settings">Configurações</button>
       </nav>
@@ -44,73 +43,52 @@
     </aside>
 
     <main class="content">
-      <!-- Visão geral -->
       <section class="tab" data-tab="overview">
         <div class="head"><h2>Visão geral</h2><button class="btn btn-sm" id="btnRefresh">Atualizar</button></div>
         <div class="alerts" id="alerts"></div>
         <div class="tiles" id="tiles"></div>
         <div class="grid-2">
           <div class="card glass">
-            <h3>Vendas · últimos 14 dias</h3>
+            <h3>Likes enviados · últimos 14 dias</h3>
             <div class="bars" id="bars"></div>
           </div>
           <div class="card glass">
-            <h3>Saldo da API de likes</h3>
-            <div id="balance" class="kv"></div>
+            <div class="head"><h3>Status da API</h3><button class="btn btn-sm" id="btnResetLimit">Zerar limite diário</button></div>
+            <div id="apiStatus" class="kv"></div>
+            <div class="table-wrap" style="margin-top:12px"><table id="regionsTable"><thead><tr><th>Região</th><th>Contas</th><th>Tokens válidos</th><th>Saúde</th></tr></thead><tbody></tbody></table></div>
           </div>
         </div>
       </section>
 
-      <!-- Pedidos -->
-      <section class="tab" data-tab="orders" hidden>
-        <div class="head"><h2>Pedidos</h2></div>
-        <div class="filters">
-          <select id="orderStatus">
-            <option value="">Todos</option>
-            <option value="pending">Aguardando PIX</option>
-            <option value="paid">Pago</option>
-            <option value="delivering">Enviando</option>
-            <option value="completed">Concluído</option>
-            <option value="failed">Falhou</option>
-            <option value="expired">Expirado</option>
-            <option value="cancelled">Cancelado</option>
-          </select>
-          <input id="orderSearch" placeholder="Buscar por código, ID, nick ou contato" />
-        </div>
-        <div class="table-wrap glass"><table id="ordersTable"><thead><tr><th>Código</th><th>Jogador</th><th>Plano</th><th>Valor</th><th>Status</th><th>Envios</th><th>Criado</th><th></th></tr></thead><tbody></tbody></table></div>
-      </section>
-
-      <!-- Envios -->
-      <section class="tab" data-tab="deliveries" hidden>
+      <section class="tab" data-tab="sends" hidden>
         <div class="head"><h2>Envios</h2></div>
         <div class="filters">
-          <select id="deliveryStatus">
+          <select id="sendStatus">
             <option value="">Todos</option>
-            <option value="queued">Na fila</option>
-            <option value="sent">Enviados</option>
-            <option value="failed">Falharam</option>
-            <option value="cancelled">Cancelados</option>
+            <option value="ok">Com likes</option>
+            <option value="nochange">Sem alteração</option>
+            <option value="error">Falharam</option>
+            <option value="pending">Em andamento</option>
           </select>
+          <input id="sendSearch" placeholder="Buscar por ID, nick ou região" />
         </div>
-        <div class="table-wrap glass"><table id="deliveriesTable"><thead><tr><th>#</th><th>ID / nick</th><th>Pedido</th><th>Dia</th><th>Likes</th><th>Status</th><th>Quando</th><th>Obs.</th><th></th></tr></thead><tbody></tbody></table></div>
+        <div class="table-wrap glass"><table id="sendsTable"><thead><tr><th>#</th><th>ID / nick</th><th>Região</th><th>Antes → depois</th><th>Likes</th><th>Status</th><th>Origem</th><th>Quando</th><th>Obs.</th></tr></thead><tbody></tbody></table></div>
       </section>
 
-      <!-- Enviar -->
       <section class="tab" data-tab="send" hidden>
         <div class="head"><h2>Enviar likes</h2></div>
         <div class="card glass narrow">
-          <p class="muted">Envio manual, sem pedido (bônus, reposição, teste). Respeita o limite de 2.000 likes por dia em cada ID.</p>
+          <p class="muted">Envio pelo painel, sem o limite de um por dia do site. A API ainda só deixa cada conta curtir um perfil uma vez por dia.</p>
           <form id="formSend">
-            <label class="field"><span>ID do jogador</span><div class="row"><input id="sendUid" inputmode="numeric" maxlength="12" required /><button class="btn" type="button" id="btnSendCheck">Conferir</button></div></label>
-            <div class="player" id="sendPlayer" hidden></div>
-            <label class="field"><span>Quantidade (1 a 2.000)</span><input id="sendAmount" type="number" min="1" max="2000" value="2000" required /></label>
-            <button class="btn btn-primary" type="submit" id="btnSend">Enviar agora</button>
+            <label class="field"><span>ID do jogador</span><input id="sendUid" inputmode="numeric" maxlength="12" required /></label>
+            <label class="field"><span>Região</span><select id="sendServer"></select></label>
+            <div class="row"><button class="btn" type="button" id="btnSendCheck">Conferir</button><button class="btn btn-primary" type="submit" id="btnSend">Enviar agora</button></div>
           </form>
+          <div class="player" id="sendPlayer" hidden></div>
           <div id="sendResult"></div>
         </div>
       </section>
 
-      <!-- Configurações -->
       <section class="tab" data-tab="settings" hidden>
         <div class="head"><h2>Configurações</h2></div>
         <form id="formSettings" class="card glass">
@@ -118,17 +96,19 @@
             <label class="field"><span>Nome do site</span><input id="sSiteName" maxlength="40" required /></label>
             <label class="field"><span>WhatsApp do suporte (só números, com DDD)</span><input id="sWhatsapp" inputmode="numeric" maxlength="20" placeholder="11999999999" /></label>
           </div>
-          <label class="field"><span>Frase de destaque (abaixo do título)</span><input id="sTagline" maxlength="120" /></label>
+          <label class="field"><span>Frase de destaque (abaixo do título)</span><input id="sTagline" maxlength="140" /></label>
           <label class="field"><span>Aviso no topo do site (vazio = sem aviso)</span><input id="sNotice" maxlength="200" placeholder="Ex.: Envios em manutenção até 18h." /></label>
-          <div class="head"><h3>Planos</h3><div class="row"><button class="btn btn-sm" type="button" id="btnAddPlan">+ Plano</button><button class="btn btn-sm" type="button" id="btnResetPlans">Restaurar padrão</button></div></div>
-          <p class="muted small">Cada dia do plano = 2.000 likes. Preço em reais.</p>
-          <div class="table-wrap"><table id="plansTable"><thead><tr><th>Ativo</th><th>Código</th><th>Nome</th><th>Dias</th><th>Preço (R$)</th><th>Selo</th><th>Descrição</th><th></th></tr></thead><tbody></tbody></table></div>
+          <label class="opt"><input type="checkbox" id="sPublicSend" /> <span>Visitantes podem pedir likes pelo site (1 vez por dia por ID)</span></label>
+          <div class="grid-2">
+            <label class="field"><span>Região padrão</span><select id="sDefaultServer"></select></label>
+            <div class="field"><span>Regiões ativas</span><div class="checks" id="sServers"></div></div>
+          </div>
           <p class="error" id="settingsError" hidden></p>
           <button class="btn btn-primary" type="submit">Salvar</button>
         </form>
         <div class="card glass" style="margin-top:18px">
-          <h3>Chaves e integrações</h3>
-          <p class="muted small">Por segurança, a API Key dos likes, o Access Token do Mercado Pago e a senha do admin ficam no arquivo <code>.env</code> do servidor (veja o README).</p>
+          <h3>Integração</h3>
+          <p class="muted small">A chave da API e a senha do admin ficam no arquivo <code>.env</code> do site; as contas e tokens ficam só na pasta da API (veja o README).</p>
           <div class="kv" id="integrations"></div>
         </div>
       </section>
