@@ -81,13 +81,15 @@
 
       <!-- ===================== LOJISTA: INTEGRAÇÃO ===================== -->
       <section class="view" data-view="integration">
-        <div class="topbar"><div><h1>Integração</h1><p>Chave da API, webhooks e o que o seu sistema precisa para cobrar automaticamente.</p></div><div class="actions"><a class="btn" href="/docs" target="_blank" rel="noopener">Documentação da API</a></div></div>
+        <div class="topbar"><div><h1>Integração</h1><p>Credenciais da API, webhooks e o que o seu sistema precisa para cobrar automaticamente.</p></div><div class="actions"><a class="btn" href="/docs" target="_blank" rel="noopener">Documentação da API</a></div></div>
         <div class="grid g-2">
-          <div class="card card-pad form">
-            <div><h3 style="font-size:17px">Chave da API</h3><p class="muted" style="font-size:14px;margin-top:4px">Use no header <span class="mono">Authorization: Bearer …</span>. Por segurança, a chave completa só aparece uma vez, quando é gerada.</p></div>
-            <div class="secret"><code id="iKey">Nenhuma chave gerada</code><button class="btn btn-sm hidden" id="iKeyCopy" type="button">Copiar</button></div>
-            <div class="alert info" id="iKeyNote"></div>
-            <div><button class="btn" id="iKeyNew" type="button">Gerar chave</button></div>
+          <div class="card card-pad form" id="credCard">
+            <div><h3 style="font-size:17px">Credenciais da API</h3><p class="muted" style="font-size:14px;margin-top:4px">Duas credenciais, sempre juntas: o <b>Client ID</b> identifica a sua conta e o <b>Client Secret</b> prova que é você. Envie as duas em toda requisição (<a href="/docs#autenticacao" target="_blank" rel="noopener" style="color:var(--accent-2)">como autenticar</a>).</p></div>
+            <div class="field"><label>Client ID <span class="hint" style="display:inline">· público</span></label><div class="secret"><code id="cId">—</code><button class="btn btn-sm" id="cIdCopy" type="button">Copiar</button></div></div>
+            <div class="field"><label>Client Secret <span class="hint" style="display:inline">· privado</span></label><div class="secret"><code id="cSecret">—</code><button class="btn btn-sm hidden" id="cSecretCopy" type="button">Copiar</button></div></div>
+            <div class="alert" id="cNote"></div>
+            <div class="kv" id="cMeta"></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" id="cRegen" type="button">Gerar novas credenciais</button><button class="btn btn-ghost" id="cRevoke" type="button">Revogar segredo</button></div>
           </div>
           <form class="card card-pad form" id="hookForm">
             <div><h3 style="font-size:17px">Webhook</h3><p class="muted" style="font-size:14px;margin-top:4px">Avisamos seu sistema por POST quando uma cobrança é criada, paga, expira ou é cancelada, e quando um saque muda de status.</p></div>

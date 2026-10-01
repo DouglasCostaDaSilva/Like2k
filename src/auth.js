@@ -98,18 +98,50 @@ export function requireAdmin(req, res, next) {
   });
 }
 
-// ---------- API Key do lojista (guardada só como hash) ----------
-export function issueApiKey(user) {
-  const key = `zp_live_${crypto.randomBytes(24).toString('hex')}`;
-  user.apiKeyHash = sha256(key);
-  user.apiKeyPrefix = `${key.slice(0, 12)}…${key.slice(-4)}`;
-  return key;
+// ---------- Credenciais de API: Client ID (público) + Client Secret (guardado só como hash) ----------
+const idOf = () => `zp_id_${crypto.randomBytes(8).toString('hex')}`;
+const secretOf = () => `zp_sk_${crypto.randomBytes(24).toString('hex')}`;
+const sameHash = (a, b) => Boolean(a) && a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+
+export function ensureClientId(user) {
+  user.credentials ||= {};
+  if (!user.credentials.clientId) user.credentials.clientId = idOf();
+  return user.credentials.clientId;
 }
 
-export function userByApiKey(key) {
-  if (!key || !key.startsWith('zp_')) return null;
-  const hash = sha256(key);
-  return db().users.find((u) => u.apiKeyHash && u.apiKeyHash.length === hash.length && crypto.timingSafeEqual(Buffer.from(u.apiKeyHash), Buffer.from(hash))) || null;
+// scope: 'secret' troca só o segredo; 'both' troca Client ID e Client Secret.
+// graceMinutes: por quanto tempo o segredo antigo continua valendo (0 = revoga na hora).
+export function issueCredentials(user, { scope = 'secret', graceMinutes = 0 } = {}) {
+  const c = (user.credentials ||= {});
+  const hadSecret = Boolean(c.secretHash);
+  if (scope === 'both' || !c.clientId) c.clientId = idOf();
+  if (hadSecret && scope !== 'both' && graceMinutes > 0) c.previous = { secretHash: c.secretHash, until: Date.now() + graceMinutes * 60000 };
+  else delete c.previous;
+  const secret = secretOf();
+  c.secretHash = sha256(secret);
+  c.secretHint = `zp_sk_…${secret.slice(-4)}`;
+  const stamp = new Date().toISOString();
+  if (hadSecret) { c.rotatedAt = stamp; c.createdAt ||= stamp; } else { c.createdAt = stamp; delete c.rotatedAt; }
+  return { clientId: c.clientId, clientSecret: secret };
+}
+
+export function revokeSecret(user) {
+  const c = user.credentials;
+  if (!c) return;
+  delete c.secretHash; delete c.secretHint; delete c.previous;
+}
+
+const DUMMY = sha256('zyropay-dummy');
+export function userByCredentials(clientId, secret) {
+  if (typeof clientId !== 'string' || typeof secret !== 'string' || !clientId.startsWith('zp_id_') || !secret.startsWith('zp_sk_')) return null;
+  const user = db().users.find((u) => u.credentials?.clientId === clientId);
+  const hash = sha256(secret);
+  const c = user?.credentials;
+  const current = sameHash(c?.secretHash || DUMMY, hash);
+  const previous = Boolean(c?.previous && c.previous.until > Date.now()) && sameHash(c.previous.secretHash, hash);
+  if (!user || !(current || previous)) return null;
+  if (c.previous && c.previous.until <= Date.now()) delete c.previous;
+  return user;
 }
 
 // ---------- proteção contra força bruta ----------

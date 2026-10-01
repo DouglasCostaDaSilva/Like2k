@@ -37,17 +37,28 @@ O dinheiro dos PIX cai na conta Mercado Pago dona do token. Os saques aos lojist
 
 ## API
 
-Documentação completa em `/docs`. Resumo:
+Documentação completa (início rápido, autenticação, cobranças, saques, webhooks, erros e guias) em `/docs`. Resumo:
 
 | Método | Rota | O que faz |
 | --- | --- | --- |
 | POST | `/v1/charges` | Cria cobrança (`amount` em centavos, `Idempotency-Key` opcional) |
 | GET | `/v1/charges/{id}` | Consulta (aceita também o `external_id`) |
-| GET | `/v1/charges` | Lista |
+| GET | `/v1/charges` | Lista (`limit`, `status`, `external_id`, `starting_after`) |
 | POST | `/v1/charges/{id}/cancel` | Cancela pendente |
 | GET | `/v1/balance` | Saldo |
+| GET / POST | `/v1/withdrawals` | Lista / pede saque |
+| GET | `/v1/account` | Dados da conta (serve para testar as credenciais) |
 
-Autenticação: `Authorization: Bearer zp_live_…` (a chave é guardada só como hash).
+### Autenticação com duas credenciais
+
+Toda chamada leva **Client ID** (`zp_id_…`, público) **e** **Client Secret** (`zp_sk_…`, privado), por HTTP Basic (`Authorization: Basic base64(id:secret)`) ou pelos headers `Zyropay-Client-Id` e `Zyropay-Client-Secret`.
+
+- O Client ID é criado no cadastro; o Client Secret é gerado automaticamente na primeira visita a **Painel › Integração** e aparece **uma vez** (no banco fica só o hash SHA-256).
+- O lojista gera novas credenciais quando quiser (pede a senha): só o secret, ou ID + secret, com carência opcional de 1 h / 24 h em que o secret antigo continua valendo. Também pode revogar o secret.
+- 5 credenciais inválidas seguidas (mesmo IP e Client ID) bloqueiam novas tentativas por 10 min. Limite de 120 requisições por minuto por conta.
+- Erros da API trazem `error`, `code` estável e `request_id`.
+
+Rotas do painel: `GET/POST/DELETE /api/merchant/credentials`.
 
 ## Estrutura
 
@@ -56,9 +67,10 @@ server.js             rotas: autenticação, painel, API v1, webhooks, admin
 src/config.js         variáveis de ambiente e cálculo da taxa
 src/mercadopago.js    provedor PIX (Mercado Pago) + provedor simulado
 src/webhooks.js       envio assinado e reenvio dos avisos aos lojistas
-src/auth.js           senhas (scrypt), sessões, chaves de API
+src/auth.js           senhas (scrypt), sessões, credenciais de API (Client ID + Secret)
 src/db.js             banco em arquivo JSON (data/zyropay.json)
-public/               página inicial, entrar/cadastro, painel, checkout e docs
+public/               landing page, entrar/cadastro, painel, checkout e documentação
+                      (css/site.css e js/site.js compartilhados pela landing e pelos docs)
 ```
 
 ## Antes de operar com dinheiro de terceiros

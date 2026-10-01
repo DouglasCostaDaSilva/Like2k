@@ -8,7 +8,7 @@ import { provider, ProviderError } from './src/mercadopago.js';
 import { enqueue, newWebhookSecret, processDeliveries, deliverNow } from './src/webhooks.js';
 import {
   hashPassword, verifyPassword, findLogin, ensureAdmin, createSession, destroySession, destroyUserSessions,
-  requireAuth, requireMerchant, requireAdmin, issueApiKey, userByApiKey, loginBlocked, loginFailed, loginSucceeded,
+  requireAuth, requireMerchant, requireAdmin, ensureClientId, issueCredentials, revokeSecret, userByCredentials, loginBlocked, loginFailed, loginSucceeded,
 } from './src/auth.js';
 
 load();
@@ -24,6 +24,7 @@ app.use((req, res, next) => {
   if (!req.path.startsWith('/pay/')) res.setHeader('X-Frame-Options', 'DENY');
   next();
 });
+app.use('/v1', (req, res, next) => apiEnvelope(req, res, next));
 app.use(express.json({ limit: '64kb' }));
 
 // Painel: alterações só em JSON (com SameSite=Strict, bloqueia CSRF). A API /v1 usa chave, sem cookie.
@@ -89,10 +90,12 @@ const chargeOut = (c) => ({
   checkout_url: `${config.publicUrl}/pay/${c.id}`, expires_at: c.expiresAt, paid_at: c.paidAt, created_at: c.createdAt,
 });
 
+const withdrawalOut = (w) => ({ id: w.id, amount: w.amount, pix_key: w.pixKey, status: w.status, note: w.note, created_at: w.createdAt, closed_at: w.closedAt });
+
 const publicUser = (u) => ({
   id: u.id, role: u.role, status: u.status, name: u.name, email: u.email, username: u.username || null, document: u.document || '',
   phone: u.phone || '', pixKey: u.pixKey || '', webhookUrl: u.webhookUrl || '', hasWebhookSecret: Boolean(u.webhookSecret),
-  apiKeyPrefix: u.apiKeyPrefix || null, feePercent: u.feePercent ?? config.feePercent, feeMinCents: u.feeMinCents ?? config.feeMinCents,
+  feePercent: u.feePercent ?? config.feePercent, feeMinCents: u.feeMinCents ?? config.feeMinCents,
   createdAt: u.createdAt, lastLoginAt: u.lastLoginAt || null,
 });
 
@@ -205,6 +208,7 @@ app.post('/api/auth/register', (req, res) => {
     passwordHash: hashPassword(password), document: String(document).replace(/\D/g, ''), phone: String(phone || '').slice(0, 30),
     pixKey: '', webhookUrl: '', webhookSecret: newWebhookSecret(), createdAt: now(),
   });
+  ensureClientId(db().users.at(-1));
   save();
   res.json({ ok: true, message: 'Cadastro enviado! Avisaremos assim que sua conta for aprovada.' });
 });
@@ -320,19 +324,25 @@ app.get('/api/merchant/withdrawals', requireMerchant, (req, res) => {
   res.json({ withdrawals: db().withdrawals.filter((w) => w.merchantId === req.user.id).slice().reverse(), balance: balanceOf(req.user.id) });
 });
 
-app.post('/api/merchant/withdrawals', requireMerchant, (req, res) => {
-  const amount = toInt(req.body?.amount);
-  const pixKey = String(req.body?.pixKey || req.user.pixKey || '').trim();
-  const bal = balanceOf(req.user.id);
-  if (!Number.isInteger(amount) || amount < config.minWithdrawalCents) return res.status(400).json({ error: `O saque mínimo é ${brl(config.minWithdrawalCents)}.` });
-  if (amount > bal.available) return res.status(400).json({ error: `Saldo disponível insuficiente (${brl(bal.available)}).` });
-  if (pixKey.length < 5) return res.status(400).json({ error: 'Informe a chave PIX que vai receber o saque.' });
-  if (db().withdrawals.filter((w) => w.merchantId === req.user.id && w.status === 'pending').length >= 3) return res.status(400).json({ error: 'Você já tem 3 saques em análise.' });
-  const w = { id: nextId('withdrawal'), merchantId: req.user.id, merchant: req.user.name, amount, pixKey: pixKey.slice(0, 120), status: 'pending', note: null, createdAt: now(), closedAt: null };
+function requestWithdrawal(merchant, input) {
+  const amount = toInt(input.amount);
+  const pixKey = String(input.pix_key || input.pixKey || merchant.pixKey || '').trim();
+  const bal = balanceOf(merchant.id);
+  if (!Number.isInteger(amount) || amount < config.minWithdrawalCents) return { status: 400, error: `O saque mínimo é ${brl(config.minWithdrawalCents)}.` };
+  if (amount > bal.available) return { status: 400, error: `Saldo disponível insuficiente (${brl(bal.available)}).` };
+  if (pixKey.length < 5) return { status: 400, error: 'Informe a chave PIX que vai receber o saque.' };
+  if (db().withdrawals.filter((w) => w.merchantId === merchant.id && w.status === 'pending').length >= 3) return { status: 400, error: 'Você já tem 3 saques em análise.' };
+  const w = { id: nextId('withdrawal'), merchantId: merchant.id, merchant: merchant.name, amount, pixKey: pixKey.slice(0, 120), status: 'pending', note: null, createdAt: now(), closedAt: null };
   db().withdrawals.push(w);
   save();
-  enqueue(req.user, 'withdrawal.requested', w);
-  res.status(201).json({ withdrawal: w, balance: balanceOf(req.user.id) });
+  enqueue(merchant, 'withdrawal.requested', withdrawalOut(w));
+  return { status: 201, withdrawal: w };
+}
+
+app.post('/api/merchant/withdrawals', requireMerchant, (req, res) => {
+  const r = requestWithdrawal(req.user, req.body || {});
+  if (r.error) return res.status(r.status).json({ error: r.error });
+  res.status(201).json({ withdrawal: r.withdrawal, balance: balanceOf(req.user.id) });
 });
 
 app.put('/api/merchant/settings', requireMerchant, (req, res) => {
@@ -354,10 +364,37 @@ app.put('/api/merchant/settings', requireMerchant, (req, res) => {
   res.json({ user: publicUser(u) });
 });
 
-app.post('/api/merchant/apikey', requireMerchant, (req, res) => {
-  const key = issueApiKey(req.user);
+const credentialsOut = (u) => {
+  const c = u.credentials || {};
+  return {
+    clientId: ensureClientId(u), hasSecret: Boolean(c.secretHash), secretHint: c.secretHint || null,
+    createdAt: c.createdAt || null, rotatedAt: c.rotatedAt || null, lastUsedAt: c.lastUsedAt || null,
+    previousValidUntil: c.previous && c.previous.until > Date.now() ? new Date(c.previous.until).toISOString() : null,
+  };
+};
+
+app.get('/api/merchant/credentials', requireMerchant, (req, res) => {
+  const out = credentialsOut(req.user);
   save();
-  res.json({ apiKey: key, prefix: req.user.apiKeyPrefix });
+  res.json(out);
+});
+
+// Gera (ou gera de novo) as credenciais. Sem segredo ativo, gera direto; trocar um segredo ativo exige a senha.
+app.post('/api/merchant/credentials', requireMerchant, (req, res) => {
+  const u = req.user, b = req.body || {};
+  const scope = b.scope === 'both' ? 'both' : 'secret';
+  const grace = [0, 60, 1440].includes(Number(b.graceMinutes)) ? Number(b.graceMinutes) : 0;
+  if (u.credentials?.secretHash && !verifyPassword(b.password, u.passwordHash)) return res.status(400).json({ error: 'Confirme com a sua senha para gerar novas credenciais.' });
+  const issued = issueCredentials(u, { scope, graceMinutes: grace });
+  save();
+  res.json({ ...credentialsOut(u), clientId: issued.clientId, clientSecret: issued.clientSecret });
+});
+
+app.delete('/api/merchant/credentials', requireMerchant, (req, res) => {
+  if (!verifyPassword(req.body?.password, req.user.passwordHash)) return res.status(400).json({ error: 'Senha incorreta.' });
+  revokeSecret(req.user);
+  save();
+  res.json(credentialsOut(req.user));
 });
 
 app.post('/api/merchant/webhook-secret', requireMerchant, (req, res) => {
@@ -380,18 +417,49 @@ app.get('/api/merchant/deliveries', requireMerchant, (req, res) => {
 });
 
 // ---------- API pública v1 ----------
+const RATE_LIMIT = 120;
 const hits = new Map();
+const CODES = { 400: 'invalid_request', 401: 'unauthorized', 403: 'forbidden', 404: 'not_found', 409: 'conflict', 429: 'rate_limited', 500: 'internal_error', 502: 'provider_error', 503: 'provider_unavailable' };
+
+// toda resposta de erro da API leva um "code" estável e o id da requisição
+function apiEnvelope(req, res, next) {
+  const rid = `req_${crypto.randomBytes(8).toString('hex')}`;
+  res.setHeader('Zyropay-Request-Id', rid);
+  const json = res.json.bind(res);
+  res.json = (body) => json(body && typeof body === 'object' && body.error && !body.code ? { error: body.error, code: CODES[res.statusCode] || 'error', request_id: rid } : body);
+  next();
+}
+
+// Autenticação com duas credenciais: Client ID + Client Secret.
+// HTTP Basic (id:secret) ou os headers Zyropay-Client-Id / Zyropay-Client-Secret.
+function apiCredentials(req) {
+  const auth = req.get('Authorization') || '';
+  if (/^basic /i.test(auth)) {
+    const raw = Buffer.from(auth.slice(6).trim(), 'base64').toString('utf8');
+    const i = raw.indexOf(':');
+    return i > 0 ? [raw.slice(0, i), raw.slice(i + 1)] : [null, null];
+  }
+  return [String(req.get('Zyropay-Client-Id') || ''), String(req.get('Zyropay-Client-Secret') || '')];
+}
+
 function apiAuth(req, res, next) {
-  const header = req.get('Authorization') || '';
-  const key = header.startsWith('Bearer ') ? header.slice(7).trim() : String(req.get('X-Api-Key') || '');
-  const user = userByApiKey(key);
-  if (!user) return res.status(401).json({ error: 'API key ausente ou inválida.' });
+  const [id, secret] = apiCredentials(req);
+  if (!id && !secret) return res.status(401).json({ error: 'Credenciais ausentes. Envie o Client ID e o Client Secret.' });
+  const failKey = `api|${req.ip}|${id}`;
+  if (loginBlocked(failKey)) return res.status(429).json({ error: 'Muitas credenciais inválidas. Tente de novo em alguns minutos.' });
+  const user = userByCredentials(id, secret);
+  if (!user) { loginFailed(failKey); return res.status(401).json({ error: 'Client ID ou Client Secret inválidos.' }); }
+  loginSucceeded(failKey);
   if (user.status !== 'active') return res.status(403).json({ error: 'Conta desativada.' });
   const minute = Math.floor(Date.now() / 60000);
   const h = hits.get(user.id);
   const count = h && h.minute === minute ? h.count + 1 : 1;
   hits.set(user.id, { minute, count });
-  if (count > 120) return res.status(429).json({ error: 'Limite de 120 requisições por minuto.' });
+  res.setHeader('X-RateLimit-Limit', RATE_LIMIT);
+  res.setHeader('X-RateLimit-Remaining', Math.max(0, RATE_LIMIT - count));
+  if (count > RATE_LIMIT) { res.setHeader('Retry-After', 60 - (Math.floor(Date.now() / 1000) % 60)); return res.status(429).json({ error: `Limite de ${RATE_LIMIT} requisições por minuto.` }); }
+  const c = user.credentials;
+  if (!c.lastUsedAt || Date.now() - Date.parse(c.lastUsedAt) > 60000) { c.lastUsedAt = now(); save(); }
   req.user = user;
   next();
 }
@@ -406,7 +474,14 @@ v1.post('/charges', wrap(async (req, res) => {
 v1.get('/charges', (req, res) => {
   const limit = Math.min(100, Math.max(1, toInt(req.query.limit) || 20));
   const status = String(req.query.status || '');
-  res.json({ data: db().charges.filter((c) => c.merchantId === req.user.id && (!status || c.status === status)).slice(-limit).reverse().map(chargeOut) });
+  const externalId = String(req.query.external_id || '');
+  let list = db().charges.filter((c) => c.merchantId === req.user.id && (!status || c.status === status) && (!externalId || c.externalId === externalId)).reverse();
+  if (req.query.starting_after) {
+    const i = list.findIndex((c) => c.id === String(req.query.starting_after));
+    if (i < 0) return res.status(400).json({ error: 'starting_after não corresponde a nenhuma cobrança.' });
+    list = list.slice(i + 1);
+  }
+  res.json({ data: list.slice(0, limit).map(chargeOut), has_more: list.length > limit });
 });
 v1.get('/charges/:id', wrap(async (req, res) => {
   const c = db().charges.find((x) => (x.id === req.params.id || x.externalId === req.params.id) && x.merchantId === req.user.id);
@@ -426,6 +501,19 @@ v1.get('/balance', (req, res) => {
   const b = balanceOf(req.user.id);
   res.json({ available: b.available, pending_withdrawals: b.pendingWithdrawals, total_received: b.gross, total_fees: b.fees, total_withdrawn: b.withdrawn, currency: 'BRL' });
 });
+v1.get('/account', (req, res) => {
+  const u = req.user;
+  res.json({ id: u.id, name: u.name, status: u.status, fee_percent: u.feePercent ?? config.feePercent, fee_min: u.feeMinCents ?? config.feeMinCents, webhook_url: u.webhookUrl || null, client_id: u.credentials.clientId });
+});
+v1.get('/withdrawals', (req, res) => {
+  res.json({ data: db().withdrawals.filter((w) => w.merchantId === req.user.id).slice(-50).reverse().map(withdrawalOut) });
+});
+v1.post('/withdrawals', (req, res) => {
+  const r = requestWithdrawal(req.user, req.body || {});
+  if (r.error) return res.status(r.status).json({ error: r.error });
+  res.status(201).json(withdrawalOut(r.withdrawal));
+});
+v1.use((req, res) => res.status(404).json({ error: 'Rota não encontrada.' }));
 app.use('/v1', express.json({ limit: '64kb' }), v1);
 
 // ---------- notificações do Mercado Pago ----------
@@ -529,7 +617,7 @@ app.post('/api/admin/withdrawals/:id/:action', requireAdmin, (req, res) => {
   w.note = String(req.body?.note || '').slice(0, 200) || null;
   w.closedAt = now();
   save();
-  enqueue(db().users.find((u) => u.id === w.merchantId), `withdrawal.${w.status}`, w);
+  enqueue(db().users.find((u) => u.id === w.merchantId), `withdrawal.${w.status}`, withdrawalOut(w));
   res.json({ withdrawal: w });
 });
 

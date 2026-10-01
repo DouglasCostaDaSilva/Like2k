@@ -45,7 +45,7 @@ document.addEventListener('click', (e) => {
 });
 $('#menuBtn').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
 $('#logout').addEventListener('click', async () => { await api('/api/auth/logout', { method: 'POST' }).catch(() => {}); location.href = '/entrar'; });
-addEventListener('hashchange', () => { const v = location.hash.slice(1); if (v && v !== current) go(v); });
+addEventListener('hashchange', () => { const v = location.hash.slice(1); if (state.me && v && v !== current) go(v); });
 
 // ------------------------------------------------------------------ modal
 function openModal({ title, body, foot = '' }) {
@@ -66,7 +66,7 @@ function confirmModal({ title, text, okText = 'Confirmar', danger = false, input
   return new Promise((resolve) => {
     openModal({
       title,
-      body: `<p style="color:var(--text-2);font-size:14px">${text}</p>${input ? `<div class="field"><label for="cfIn">${input.label}</label><input class="input" id="cfIn" placeholder="${esc(input.placeholder || '')}" value="${esc(input.value || '')}" /></div>` : ''}<div class="alert" id="cfMsg"></div>`,
+      body: `<p style="color:var(--text-2);font-size:14px">${text}</p>${input ? `<div class="field"><label for="cfIn">${input.label}</label><input class="input" id="cfIn" type="${input.type || 'text'}" placeholder="${esc(input.placeholder || '')}" value="${esc(input.value || '')}" /></div>` : ''}<div class="alert" id="cfMsg"></div>`,
       foot: `<button class="btn" id="cfNo">Cancelar</button><button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="cfYes">${okText}</button>`,
     });
     $('#cfNo').onclick = () => { closeModal(); resolve(null); };
@@ -299,10 +299,7 @@ $('#wForm').addEventListener('submit', async (e) => {
 let secretShown = false;
 LOADERS.integration = async () => {
   const u = state.me;
-  $('#iKey').textContent = u.apiKeyPrefix || 'Nenhuma chave gerada';
-  $('#iKeyNew').textContent = u.apiKeyPrefix ? 'Gerar nova chave' : 'Gerar chave';
-  $('#iKeyCopy').classList.add('hidden');
-  alertBox($('#iKeyNote'));
+  loadCredentials();
   $('#iUrl').value = u.webhookUrl || '';
   secretShown = false;
   $('#iSecret').textContent = 'whsec_••••••••••••••••';
@@ -319,19 +316,65 @@ async function loadHooks() {
     : '<div class="empty"><b>Nenhum aviso enviado ainda</b>Cadastre a URL do webhook e clique em “Enviar teste”.</div>';
 }
 $('#iReload').addEventListener('click', loadHooks);
-$('#iKeyNew').addEventListener('click', async () => {
-  if (state.me.apiKeyPrefix) {
-    const ok = await confirmModal({ title: 'Gerar nova chave', text: 'A chave atual para de funcionar na hora. Atualize seu sistema com a nova chave.', okText: 'Gerar nova', danger: true });
-    if (!ok) return;
-    ok.done();
+// ---- credenciais: Client ID (público) + Client Secret (só aparece quando é gerado)
+let cred = null;
+const whenTxt = (v) => (v ? dt(v) : '—');
+function paintCredentials(fresh) {
+  $('#cId').textContent = cred.clientId;
+  $('#cIdCopy').onclick = () => copy(cred.clientId, 'Client ID copiado');
+  $('#cSecret').textContent = fresh?.clientSecret || (cred.hasSecret ? `${cred.secretHint}••••••••••••••••••••••••••••` : 'Nenhum segredo ativo');
+  $('#cSecretCopy').classList.toggle('hidden', !fresh);
+  if (fresh) $('#cSecretCopy').onclick = () => copy(fresh.clientSecret, 'Client Secret copiado');
+  $('#cRegen').textContent = cred.hasSecret ? 'Gerar novas credenciais' : 'Gerar credenciais';
+  $('#cRevoke').classList.toggle('hidden', !cred.hasSecret);
+  $('#cMeta').innerHTML = `<div><span>Criado em</span><b>${whenTxt(cred.createdAt)}</b></div><div><span>Última troca do segredo</span><b>${whenTxt(cred.rotatedAt)}</b></div><div><span>Último uso na API</span><b>${cred.lastUsedAt ? dt(cred.lastUsedAt) : 'Nunca usada'}</b></div>${cred.previousValidUntil ? `<div><span>Segredo anterior vale até</span><b>${dt(cred.previousValidUntil)}</b></div>` : ''}`;
+}
+async function loadCredentials() {
+  alertBox($('#cNote'));
+  cred = await api('/api/merchant/credentials');
+  paintCredentials();
+  if (!cred.hasSecret) {
+    // primeira visita: geramos as credenciais automaticamente
+    const r = await api('/api/merchant/credentials', { method: 'POST', body: {} });
+    cred = r;
+    paintCredentials(r);
+    alertBox($('#cNote'), 'Geramos suas credenciais automaticamente. Copie o Client Secret agora: ele não será mostrado de novo.', 'info');
   }
-  const r = await api('/api/merchant/apikey', { method: 'POST' });
-  state.me.apiKeyPrefix = r.prefix;
-  $('#iKey').textContent = r.apiKey;
-  $('#iKeyCopy').classList.remove('hidden');
-  $('#iKeyCopy').onclick = () => copy(r.apiKey, 'Chave copiada');
-  $('#iKeyNew').textContent = 'Gerar nova chave';
-  alertBox($('#iKeyNote'), 'Copie e guarde esta chave agora. Ela não será mostrada de novo.', 'info');
+}
+$('#cRegen').addEventListener('click', () => {
+  const first = !cred.hasSecret;
+  openModal({
+    title: first ? 'Gerar credenciais' : 'Gerar novas credenciais',
+    body: `<div class="form">${first ? '' : `<p style="color:var(--text-2);font-size:14px">O que você quer trocar? Integrações que usam as credenciais antigas vão receber erro 401 até serem atualizadas.</p>
+      <div class="field"><label for="rgScope">Trocar</label><select class="input" id="rgScope"><option value="secret">Só o Client Secret (o Client ID continua o mesmo)</option><option value="both">Client ID e Client Secret</option></select></div>
+      <div class="field" id="rgGraceBox"><label for="rgGrace">Segredo antigo continua valendo por</label><select class="input" id="rgGrace"><option value="0">Nada: revogar agora</option><option value="60">1 hora (tempo de atualizar o sistema)</option><option value="1440">24 horas</option></select><span class="hint">Só vale ao trocar apenas o segredo.</span></div>
+      <div class="field"><label for="rgPw">Sua senha</label><input class="input" id="rgPw" type="password" autocomplete="current-password" /></div>`}<div class="alert" id="rgMsg"></div></div>`,
+    foot: '<button class="btn" id="rgNo">Cancelar</button><button class="btn btn-primary" id="rgYes">Gerar</button>',
+  });
+  const scope = $('#rgScope');
+  if (scope) scope.onchange = () => { $('#rgGraceBox').classList.toggle('hidden', scope.value === 'both'); };
+  $('#rgNo').onclick = closeModal;
+  $('#rgYes').onclick = async () => {
+    busy($('#rgYes'), true, ' Gerando…');
+    try {
+      const r = await api('/api/merchant/credentials', { method: 'POST', body: { scope: scope?.value, graceMinutes: Number($('#rgGrace')?.value || 0), password: $('#rgPw')?.value } });
+      cred = r;
+      closeModal();
+      paintCredentials(r);
+      alertBox($('#cNote'), 'Credenciais geradas. Copie o Client Secret agora: ele não será mostrado de novo.', 'info');
+    } catch (err) { busy($('#rgYes'), false); alertBox($('#rgMsg'), err.message); }
+  };
+});
+$('#cRevoke').addEventListener('click', async () => {
+  const ok = await confirmModal({ title: 'Revogar o Client Secret', text: 'A API para de aceitar suas credenciais na hora. Você pode gerar um novo segredo quando quiser. Confirme com a sua senha.', okText: 'Revogar', danger: true, input: { label: 'Sua senha', type: 'password', placeholder: '••••••••' } });
+  if (!ok) return;
+  busy(ok.btn, true, ' Revogando…');
+  try {
+    cred = await api('/api/merchant/credentials', { method: 'DELETE', body: { password: ok.value } });
+    ok.done();
+    paintCredentials();
+    alertBox($('#cNote'), 'Segredo revogado. A API está desativada até você gerar um novo.', 'info');
+  } catch (err) { busy(ok.btn, false); ok.fail(err.message); }
 });
 $('#iSecretShow').addEventListener('click', async () => {
   if (secretShown) { secretShown = false; $('#iSecret').textContent = 'whsec_••••••••••••••••'; $('#iSecretShow').textContent = 'Mostrar'; return; }
