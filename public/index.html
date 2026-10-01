@@ -3,144 +3,262 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>LikeSystem — Likes 2K</title>
-  <meta name="description" content="LikeSystem: plataforma fechada para envio de likes no Free Fire. Até 2.000 likes por dia por ID." />
-  <meta name="theme-color" content="#040406" />
+  <title>Zyropay</title>
+  <meta name="description" content="Zyropay: gateway de pagamentos PIX. Receba na hora com 2% por PIX (mínimo R$ 0,30), checkout pronto, API e webhooks." />
+  <meta name="theme-color" content="#08080b" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/style.css" />
-  <script type="importmap">
-    { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
-  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/zyro.css" />
+  <style>
+    .wrap { width: min(1160px, 100% - 32px); margin: 0 auto; }
+    header.top { position: sticky; top: 0; z-index: 20; background: rgba(8, 8, 11, 0.8); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+    header.top .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; gap: 12px; }
+    header.top nav { display: flex; align-items: center; gap: 6px; }
+
+    .hero { position: relative; padding: 84px 0 64px; overflow: hidden; }
+    .hero::before { content: ''; position: absolute; width: 760px; height: 760px; right: -220px; top: -260px; background: radial-gradient(closest-side, rgba(139, 124, 255, 0.22), transparent); pointer-events: none; }
+    .hero .wrap { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 56px; align-items: center; position: relative; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface); font-size: 13px; font-weight: 600; color: var(--text-2); }
+    .eyebrow i { width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 4px var(--good-soft); }
+    .hero h1 { font-size: clamp(40px, 5.6vw, 66px); margin: 22px 0 18px; font-weight: 700; }
+    .hero h1 em { font-style: normal; color: var(--accent-2); }
+    .hero .lead { font-size: 18px; color: var(--text-2); max-width: 520px; }
+    .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+    .facts { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 40px; padding-top: 26px; border-top: 1px solid var(--line); }
+    .facts div strong { display: block; font-family: var(--display); font-size: 22px; }
+    .facts div span { font-size: 13px; color: var(--muted); }
+
+    /* checkout de demonstração */
+    .demo { position: relative; justify-self: center; width: min(380px, 100%); }
+    .demo .card { padding: 26px; box-shadow: 0 40px 100px -30px rgba(0, 0, 0, 0.9); }
+    .demo-top { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--muted); }
+    .demo-amount { font-family: var(--display); font-size: 38px; font-weight: 700; margin: 6px 0 2px; }
+    .demo-qr { position: relative; margin: 20px auto; width: 196px; height: 196px; border-radius: 14px; background: #fff; padding: 12px; }
+    .demo-qr canvas { width: 100%; height: 100%; image-rendering: pixelated; }
+    .demo-paid { position: absolute; inset: 0; border-radius: 14px; display: grid; place-items: center; background: rgba(17, 17, 22, 0.94); opacity: 0; transition: opacity 0.4s; }
+    .demo-paid svg { width: 64px; height: 64px; }
+    .demo.is-paid .demo-paid { opacity: 1; }
+    .demo-copy { display: flex; gap: 8px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--bg); border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--muted); overflow: hidden; white-space: nowrap; }
+    .demo-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; font-size: 13px; }
+    .notify { position: absolute; left: -64px; bottom: -26px; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--raised); border: 1px solid var(--line-2); box-shadow: 0 20px 50px -16px rgba(0, 0, 0, 0.9); font-size: 13px; opacity: 0; transform: translateY(8px); transition: opacity 0.35s, transform 0.35s; }
+    .notify b { display: block; font-size: 14px; }
+    .notify .ic { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: var(--good-soft); color: var(--good); font-weight: 800; }
+    .demo.is-paid .notify { opacity: 1; transform: none; }
+
+    section.block { padding: 72px 0; border-top: 1px solid var(--line); }
+    .head { max-width: 620px; margin-bottom: 36px; }
+    .head h2 { font-size: clamp(28px, 3.6vw, 40px); margin-bottom: 12px; }
+    .head p { color: var(--text-2); font-size: 16px; }
+    .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .step { padding: 24px; }
+    .step .n { font-family: var(--mono); font-size: 13px; color: var(--accent-2); }
+    .step h3 { font-size: 18px; margin: 12px 0 8px; font-family: var(--body); font-weight: 750; letter-spacing: 0; }
+    .step p { color: var(--text-2); font-size: 14px; }
+
+    .pricing { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+    .price { padding: 30px; }
+    .price .big { font-family: var(--display); font-size: 64px; font-weight: 700; line-height: 1; }
+    .price .big small { font-size: 22px; color: var(--muted); font-weight: 600; }
+    .price ul { list-style: none; display: grid; gap: 10px; margin-top: 24px; }
+    .price li { display: flex; gap: 10px; color: var(--text-2); font-size: 14px; }
+    .price li::before { content: '✓'; color: var(--good); font-weight: 800; }
+    .calc { padding: 30px; display: grid; gap: 16px; align-content: start; }
+    .calc .rows { display: grid; gap: 10px; padding: 16px; border-radius: var(--radius-sm); background: var(--bg); border: 1px solid var(--line); }
+    .calc .rows div { display: flex; justify-content: space-between; font-size: 14px; color: var(--text-2); }
+    .calc .rows .total { padding-top: 10px; border-top: 1px dashed var(--line-2); color: var(--text); font-size: 17px; font-weight: 750; }
+
+    .devs { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 32px; align-items: center; }
+    .devs ul { list-style: none; display: grid; gap: 14px; margin-top: 22px; }
+    .devs li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; color: var(--text-2); font-size: 14px; }
+    .devs li b { color: var(--text); display: block; }
+    .devs li i { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-2); font-style: normal; font-weight: 800; font-size: 13px; }
+    pre.code { margin: 0; padding: 22px; border-radius: var(--radius); background: #0b0b10; border: 1px solid var(--line); font-family: var(--mono); font-size: 13px; line-height: 1.7; color: #d9d6ea; overflow-x: auto; }
+    pre.code .k { color: var(--accent-2); } pre.code .s { color: #8fe3bd; } pre.code .c { color: #5f5d72; }
+
+    .final { text-align: center; padding: 84px 0; border-top: 1px solid var(--line); }
+    .final h2 { font-size: clamp(30px, 4vw, 46px); margin-bottom: 14px; }
+    .final p { color: var(--text-2); margin-bottom: 28px; }
+    footer { border-top: 1px solid var(--line); padding: 26px 0 40px; color: var(--muted); font-size: 13px; }
+    footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+
+    @media (max-width: 900px) {
+      .hero { padding: 48px 0 40px; }
+      .hero .wrap, .pricing, .devs { grid-template-columns: minmax(0, 1fr); }
+      .hero .wrap { gap: 44px; }
+      .steps { grid-template-columns: minmax(0, 1fr); }
+      .notify { position: static; margin-top: 12px; }
+      header.top .hide-sm { display: none; }
+      section.block { padding: 56px 0; }
+    }
+  </style>
 </head>
 <body>
-  <div class="loader" id="loader">
-    <div>
-      <svg class="loader-mark" viewBox="0 0 64 64" fill="none"><path d="M32 32c0-2 2-3 3.5-2.5 3 1 3 5.5 0 7.5-4.5 3-10.5-.5-10.5-6 0-7.5 8.5-12 15.5-9 9 4 10 17 2 23-10 7.5-24 1-24-12C18.5 17 33 9 45.5 15" stroke="url(#lg)" stroke-width="4" stroke-linecap="round"/><defs><linearGradient id="lg" x1="0" y1="0" x2="64" y2="64"><stop stop-color="#ffae42"/><stop offset="1" stop-color="#ff4d00"/></linearGradient></defs></svg>
-      <p>CARREGANDO</p>
+  <header class="top">
+    <div class="wrap">
+      <a href="/" class="brand" id="brand">Zyropay</a>
+      <nav>
+        <a href="#precos" class="btn btn-ghost hide-sm">Preços</a>
+        <a href="/docs" class="btn btn-ghost hide-sm">API</a>
+        <a href="/entrar" class="btn btn-ghost" id="navLogin">Entrar</a>
+        <a href="/cadastro" class="btn btn-primary">Criar conta</a>
+      </nav>
     </div>
-  </div>
+  </header>
 
-  <canvas id="stage" aria-hidden="true"></canvas>
-  <div class="vignette"></div>
-  <div class="grain"></div>
-  <div class="scanlines"></div>
-
-  <nav class="nav glass">
-    <a href="#topo" class="logo" aria-label="LikeSystem">
-      <svg viewBox="0 0 64 64" fill="none"><path d="M32 32c0-2 2-3 3.5-2.5 3 1 3 5.5 0 7.5-4.5 3-10.5-.5-10.5-6 0-7.5 8.5-12 15.5-9 9 4 10 17 2 23-10 7.5-24 1-24-12C18.5 17 33 9 45.5 15" stroke="#ff6a0d" stroke-width="5" stroke-linecap="round"/></svg>
-      <span>LIKE<b>SYSTEM</b></span>
-    </a>
-    <div class="nav-links">
-      <a href="#como-funciona">Como funciona</a>
-      <a href="#precos">Preços</a>
-      <a href="#acesso" class="btn btn-primary btn-sm">Entrar</a>
-    </div>
-  </nav>
-
-  <main class="landing">
-    <section class="section hero" id="topo" data-pose="hero">
-      <div class="wrap">
-        <div class="hero-copy reveal">
-          <span class="eyebrow">Free Fire · Likes Premium</span>
-          <h1><span class="thin">PLATAFORMA</span><span class="grad">LIKE</span>SYSTEM</h1>
-          <p class="lead">Envios de até <strong>2.000 likes por dia</strong> em cada ID. Estoque individual, estoque global em tempo real e acesso exclusivo para clientes aprovados.</p>
-          <div class="hero-cta">
-            <a href="#acesso" class="btn btn-primary">Acessar painel
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
-            </a>
-            <a href="#precos" class="btn">Ver preços</a>
-          </div>
-          <div class="hero-stats">
-            <div class="stat-chip glass"><strong>R$ 8,80</strong><span>a cada 2.000 likes</span></div>
-            <div class="stat-chip glass"><strong>20K</strong><span>estoque mínimo</span></div>
-            <div class="stat-chip glass"><strong>2K/dia</strong><span>por ID enviado</span></div>
-          </div>
+  <section class="hero">
+    <div class="wrap">
+      <div>
+        <span class="eyebrow"><i></i>PIX confirmado em segundos</span>
+        <h1>Receba PIX na hora.<br /><em>Pague só 2%.</em></h1>
+        <p class="lead">Gere cobranças PIX pelo painel ou pela API, mande um link de pagamento pronto e saiba na hora quando o dinheiro caiu.</p>
+        <div class="cta">
+          <a href="/cadastro" class="btn btn-primary btn-lg">Criar conta grátis</a>
+          <a href="/docs" class="btn btn-lg">Ver a API</a>
+        </div>
+        <div class="facts">
+          <div><strong>2%</strong><span>por PIX pago</span></div>
+          <div><strong>R$ 0,30</strong><span>taxa mínima</span></div>
+          <div><strong>R$ 0</strong><span>de mensalidade</span></div>
         </div>
       </div>
-      <div class="scroll-hint"><i></i>ROLE</div>
-    </section>
 
-    <section class="section" id="como-funciona" data-pose="steps">
-      <div class="wrap">
-        <div class="steps-head right reveal" style="max-width:520px">
-          <span class="eyebrow">Como funciona</span>
-          <h2>Três passos.<br /><span class="grad">Zero enrolação.</span></h2>
-          <p class="muted">Você compra o estoque uma vez e dispara quando quiser, direto do painel.</p>
-          <div class="steps">
-            <div class="step glass"><span class="n">01</span><div><h3>Compre seu estoque</h3><p>Mínimo de 20.000 likes no seu estoque individual, em pacotes de 2.000.</p></div></div>
-            <div class="step glass"><span class="n">02</span><div><h3>Informe o ID</h3><p>Digite o ID do jogador e confira o nickname antes de enviar.</p></div></div>
-            <div class="step glass"><span class="n">03</span><div><h3>Escolha a quantidade</h3><p>Até 2.000 likes por dia para cada ID, debitados do seu estoque.</p></div></div>
+      <div class="demo" id="demo" aria-label="Exemplo de checkout">
+        <div class="card">
+          <div class="demo-top"><span>Loja Aurora</span><span class="status pending" id="demoStatus">Aguardando</span></div>
+          <div class="demo-amount num">R$ 149,90</div>
+          <div class="muted" style="font-size:14px">Pedido #4821 · Tênis Runner</div>
+          <div class="demo-qr"><canvas id="demoQr" width="29" height="29"></canvas>
+            <div class="demo-paid"><svg viewBox="0 0 64 64" fill="none"><circle cx="32" cy="32" r="30" fill="#3ddc97" opacity=".16"/><path d="m20 33 8 8 16-17" stroke="#3ddc97" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
           </div>
+          <div class="demo-copy">00020126580014br.gov.bcb.pix0136a1f4…</div>
+          <div class="demo-foot"><span class="muted">Expira em <b class="num" id="demoTimer" style="color:var(--text)">29:41</b></span><span class="muted">Copiar código</span></div>
         </div>
+        <div class="notify"><span class="ic">✓</span><div><b>PIX recebido</b>R$ 149,90 · Loja Aurora</div></div>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <section class="section pricing" id="precos" data-pose="pricing">
-      <div class="wrap">
-        <div class="price-card glass reveal">
-          <span class="eyebrow">Preço único</span>
-          <div class="price-big"><span class="cur">R$</span><span class="val grad">8,80</span></div>
-          <p class="muted">a cada 2.000 likes · sem mensalidade</p>
-          <ul class="price-list">
-            <li>Estoque individual mínimo de 20.000 likes</li>
-            <li>Envios de até 2.000 likes por dia em cada ID</li>
-            <li>Confirmação do nickname antes do envio</li>
-            <li>Histórico completo de cada envio</li>
+  <section class="block" id="como">
+    <div class="wrap">
+      <div class="head"><h2>Do cadastro ao primeiro PIX em minutos</h2><p>Sem maquininha, sem integração complicada. Cobre pelo painel no primeiro dia e conecte seu sistema quando quiser.</p></div>
+      <div class="steps">
+        <div class="card step"><span class="n">01</span><h3>Crie a cobrança</h3><p>Digite o valor no painel ou chame <span class="mono">POST /v1/charges</span>. O QR Code e o copia e cola saem na hora.</p></div>
+        <div class="card step"><span class="n">02</span><h3>Seu cliente paga</h3><p>Envie o link de pagamento. A página mostra o QR, conta o tempo e confirma sozinha quando o PIX cai.</p></div>
+        <div class="card step"><span class="n">03</span><h3>Você recebe e saca</h3><p>O valor entra no saldo já descontada a taxa. Seu sistema é avisado por webhook, e você saca para sua chave PIX.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="precos">
+    <div class="wrap">
+      <div class="head"><h2>Um preço, sem letra miúda</h2><p>Você só paga quando recebe. Cobrança que expira ou é cancelada não custa nada.</p></div>
+      <div class="pricing">
+        <div class="card price">
+          <div class="big">2%<small> por PIX pago</small></div>
+          <p class="muted" style="margin-top:10px">mínimo de R$ 0,30 por transação</p>
+          <ul>
+            <li>Sem mensalidade e sem taxa de adesão</li>
+            <li>Link de pagamento e QR Code PIX</li>
+            <li>API REST, webhooks assinados e chave de idempotência</li>
+            <li>Saque para qualquer chave PIX</li>
           </ul>
-          <div class="calc">
-            <div class="calc-row"><span class="muted">Estoque</span><strong class="mono" id="calcLikes">20.000 likes</strong></div>
-            <input type="range" id="calcRange" min="20000" max="400000" step="2000" value="20000" aria-label="Quantidade de likes" />
-            <div class="calc-row"><span class="muted">Total</span><strong class="mono grad" id="calcPrice">R$ 88,00</strong></div>
+        </div>
+        <div class="card calc">
+          <div class="field"><label for="calcIn">Simule uma venda</label>
+            <div class="input-money"><span>R$</span><input class="input num" id="calcIn" inputmode="numeric" value="100,00" aria-label="Valor da venda" /></div>
           </div>
+          <div class="rows">
+            <div><span>Valor da venda</span><b class="num" id="cGross">R$ 100,00</b></div>
+            <div><span>Taxa Zyropay</span><b class="num" id="cFee">− R$ 2,00</b></div>
+            <div class="total"><span>Você recebe</span><span class="num" id="cNet">R$ 98,00</span></div>
+          </div>
+          <p class="muted" style="font-size:13px">Abaixo de R$ 15,00 vale a taxa mínima de R$ 0,30.</p>
         </div>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <section class="section access" id="acesso" data-pose="access">
-      <div class="wrap">
-        <div class="auth-card glass reveal">
-          <div id="loginBox">
-            <span class="eyebrow">Acesso restrito</span>
-            <h2>Entrar</h2>
-            <p class="muted">Use o usuário e a senha fornecidos pelo administrador.</p>
-            <form id="loginForm" autocomplete="on">
-              <div class="field"><label for="lu">Usuário</label><input class="input" id="lu" name="username" autocomplete="username" required /></div>
-              <div class="field"><label for="lp">Senha</label><input class="input" id="lp" name="password" type="password" autocomplete="current-password" required /></div>
-              <div class="alert error" id="loginErr"></div>
-              <button class="btn btn-primary btn-block" type="submit">Entrar no painel</button>
-            </form>
-            <div class="lock-note">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
-              Plataforma fechada: somente clientes aprovados entram.
-            </div>
-            <div class="auth-switch">Ainda não tem acesso? <button type="button" data-switch="request">Solicitar acesso</button></div>
-          </div>
-
-          <div id="requestBox" class="hidden">
-            <span class="eyebrow">Solicitação</span>
-            <h2>Pedir acesso</h2>
-            <p class="muted">Seu cadastro fica em análise até o administrador aprovar.</p>
-            <form id="requestForm">
-              <div class="field"><label for="ru">Usuário</label><input class="input" id="ru" name="username" autocomplete="username" required minlength="3" maxlength="24" /></div>
-              <div class="field"><label for="rp">Senha</label><input class="input" id="rp" name="password" type="password" autocomplete="new-password" required minlength="6" /></div>
-              <div class="field"><label for="rc">Contato (WhatsApp / Discord)</label><input class="input" id="rc" name="contact" required /></div>
-              <div class="alert" id="reqMsg"></div>
-              <button class="btn btn-primary btn-block" type="submit">Enviar solicitação</button>
-            </form>
-            <div class="auth-switch">Já tem acesso? <button type="button" data-switch="login">Entrar</button></div>
-          </div>
-        </div>
+  <section class="block">
+    <div class="wrap devs">
+      <div>
+        <div class="head" style="margin-bottom:0"><h2>Feito para quem desenvolve</h2><p>Uma API pequena e previsível. Valores sempre em centavos, respostas em JSON.</p></div>
+        <ul>
+          <li><i>1</i><div><b>Idempotência</b>Mande <span class="mono">Idempotency-Key</span> e nunca crie a mesma cobrança duas vezes.</div></li>
+          <li><i>2</i><div><b>Webhooks assinados</b>Cada aviso vem com <span class="mono">Zyropay-Signature</span> (HMAC-SHA256) e é reenviado se falhar.</div></li>
+          <li><i>3</i><div><b>Checkout pronto</b>Cada cobrança tem um <span class="mono">checkout_url</span> para mandar ao cliente.</div></li>
+        </ul>
+        <div class="cta"><a href="/docs" class="btn">Documentação completa</a></div>
       </div>
-    </section>
-  </main>
+<pre class="code"><span class="c"># criar uma cobrança de R$ 149,90</span>
+curl -X POST https://zyropay.app/v1/charges \
+  -H <span class="s">"Authorization: Bearer zp_live_…"</span> \
+  -H <span class="s">"Idempotency-Key: pedido-4821"</span> \
+  -d <span class="s">'{"amount": 14990, "description": "Pedido #4821"}'</span>
 
-  <footer class="foot">
-    <div class="wrap"><span>© <span id="year"></span> LikeSystem</span><span>Envios de até 2K likes por dia por ID</span></div>
-  </footer>
+<span class="c"># resposta</span>
+{
+  <span class="k">"id"</span>: <span class="s">"ch_9f2c41e0a7"</span>,
+  <span class="k">"status"</span>: <span class="s">"pending"</span>,
+  <span class="k">"amount"</span>: 14990,
+  <span class="k">"fee"</span>: 300,
+  <span class="k">"net_amount"</span>: 14690,
+  <span class="k">"pix"</span>: { <span class="k">"copy_paste"</span>: <span class="s">"00020126…"</span> },
+  <span class="k">"checkout_url"</span>: <span class="s">"https://zyropay.app/pay/ch_9f2c41e0a7"</span>
+}</pre>
+    </div>
+  </section>
 
-  <script type="module" src="/js/landing.js"></script>
+  <section class="final">
+    <div class="wrap">
+      <h2>Comece a receber hoje</h2>
+      <p>Cadastro em 2 minutos. Sua conta é analisada e liberada pela nossa equipe.</p>
+      <a href="/cadastro" class="btn btn-primary btn-lg">Criar conta grátis</a>
+    </div>
+  </section>
+
+  <footer><div class="wrap"><span>© <span id="year"></span> Zyropay</span><span>Pagamentos PIX processados via Mercado Pago</span></div></footer>
+
+  <script type="module">
+    import { LOGO, brl, toCents, moneyMask, api } from '/js/common.js';
+    document.getElementById('brand').innerHTML = `${LOGO}Zyropay`;
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    // calculadora: 2% com mínimo de R$ 0,30
+    const calcIn = document.getElementById('calcIn');
+    moneyMask(calcIn);
+    const calc = () => {
+      const v = toCents(calcIn.value) || 0;
+      const fee = v ? Math.min(v, Math.max(30, Math.round(v * 0.02))) : 0;
+      document.getElementById('cGross').textContent = brl(v);
+      document.getElementById('cFee').textContent = `− ${brl(fee)}`;
+      document.getElementById('cNet').textContent = brl(v - fee);
+    };
+    calcIn.addEventListener('input', calc);
+    calc();
+
+    // QR decorativo (padrão aleatório fixo com os três marcadores)
+    const cv = document.getElementById('demoQr'), g = cv.getContext('2d');
+    let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    g.fillStyle = '#111';
+    for (let y = 0; y < 29; y++) for (let x = 0; x < 29; x++) if (rnd() > 0.52) g.fillRect(x, y, 1, 1);
+    for (const [x, y] of [[0, 0], [22, 0], [0, 22]]) {
+      g.fillStyle = '#fff'; g.fillRect(x, y, 7, 7);
+      g.fillStyle = '#111'; g.fillRect(x, y, 7, 7); g.fillStyle = '#fff'; g.fillRect(x + 1, y + 1, 5, 5); g.fillStyle = '#111'; g.fillRect(x + 2, y + 2, 3, 3);
+    }
+
+    // ciclo da demonstração: aguardando -> pago
+    const demo = document.getElementById('demo'), st = document.getElementById('demoStatus'), timer = document.getElementById('demoTimer');
+    let secs = 1781;
+    setInterval(() => { secs = secs > 0 ? secs - 1 : 1781; timer.textContent = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`; }, 1000);
+    const cycle = () => {
+      demo.classList.remove('is-paid'); st.className = 'status pending'; st.textContent = 'Aguardando';
+      setTimeout(() => { demo.classList.add('is-paid'); st.className = 'status paid'; st.textContent = 'Pago'; }, 3200);
+    };
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) { cycle(); setInterval(cycle, 7000); }
+
+    api('/api/me').then(() => { const a = document.getElementById('navLogin'); a.textContent = 'Painel'; a.href = '/app'; }).catch(() => {});
+  </script>
 </body>
 </html>

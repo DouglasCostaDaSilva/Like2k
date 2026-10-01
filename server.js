@@ -1,621 +1,558 @@
 import crypto from 'node:crypto';
-import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
-import { config, priceCents, root } from './src/config.js';
+import QRCode from 'qrcode';
+import { config, feeFor, root } from './src/config.js';
 import { db, load, save, nextId } from './src/db.js';
-import { likeApi, getBalance, updateRemaining, ApiError } from './src/likeapi.js';
+import { provider, ProviderError } from './src/mercadopago.js';
+import { enqueue, newWebhookSecret, processDeliveries, deliverNow } from './src/webhooks.js';
 import {
-  hashPassword, verifyPassword, findUser, ensureAdmin, createSession, destroySession, destroyUserSessions,
-  currentUser, requireAuth, requireAdmin, loginBlocked, loginFailed, loginSucceeded,
+  hashPassword, verifyPassword, findLogin, ensureAdmin, createSession, destroySession, destroyUserSessions,
+  requireAuth, requireMerchant, requireAdmin, issueApiKey, userByApiKey, loginBlocked, loginFailed, loginSucceeded,
 } from './src/auth.js';
 
 load();
 ensureAdmin();
 
-// Envios interrompidos por queda do servidor ficam para conferência do admin.
-for (const s of db().sends) if (s.status === 'pending') { s.status = 'unknown'; s.error = 'Servidor reiniciado durante o envio — confira nos logs da API.'; }
-save();
-
 const app = express();
 app.disable('x-powered-by');
-app.set('trust proxy', 1); // um proxy reverso na frente (hospedagem)
+app.set('trust proxy', 1);
 
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'same-origin');
+  if (!req.path.startsWith('/pay/')) res.setHeader('X-Frame-Options', 'DENY');
   next();
 });
+app.use(express.json({ limit: '64kb' }));
 
-app.use(express.json({ limit: '32kb' }));
-app.use('/api/v1', express.urlencoded({ extended: false, limit: '32kb' })); // API pública aceita formulário também
-
-// Rotas do painel que alteram dados só aceitam JSON (junto com SameSite=Strict, bloqueia CSRF por formulário).
-// A API pública (/api/v1) usa X-Api-Key, sem cookie, então não tem esse risco.
+// Painel: alterações só em JSON (com SameSite=Strict, bloqueia CSRF). A API /v1 usa chave, sem cookie.
 app.use('/api', (req, res, next) => {
-  if (req.path.startsWith('/v1/')) return next();
   if (req.method !== 'GET' && !req.is('application/json')) return res.status(415).json({ error: 'Envie os dados em JSON.' });
   next();
 });
 
-// ---------- Utilidades ----------
-const dayKey = (date = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: config.timezone }).format(date);
-const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,24}$/;
-const UID_RE = /^\d{5,15}$/;
+const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+const now = () => new Date().toISOString();
+const dayKey = (d = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: config.timezone }).format(d);
 const toInt = (v) => (typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN);
+const brl = (c) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const usedTotal = (userId) => db().sends.filter((s) => s.userId === userId && s.status === 'success').reduce((a, s) => a + s.likesSent, 0);
-const isExpired = (u) => Boolean(u.expiresAt) && u.expiresAt < dayKey();
+// ---------- CPF / CNPJ ----------
+function validDocument(raw) {
+  const d = String(raw || '').replace(/\D/g, '');
+  if (/^(\d)\1+$/.test(d)) return false;
+  if (d.length === 11) {
+    const calc = (n) => { let s = 0; for (let i = 0; i < n; i++) s += Number(d[i]) * (n + 1 - i); const r = (s * 10) % 11; return r === 10 ? 0 : r; };
+    return calc(9) === Number(d[9]) && calc(10) === Number(d[10]);
+  }
+  if (d.length === 14) {
+    const calc = (n) => { const w = n === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]; let s = 0; for (let i = 0; i < n; i++) s += Number(d[i]) * w[i]; const r = s % 11; return r < 2 ? 0 : 11 - r; };
+    return calc(12) === Number(d[12]) && calc(13) === Number(d[13]);
+  }
+  return false;
+}
+
+// webhook do lojista: https público (http só em testes), sem endereços internos
+function validWebhookUrl(raw) {
+  if (!raw) return true;
+  let u;
+  try { u = new URL(raw); } catch { return false; }
+  if (u.protocol !== 'https:' && !(config.mock && u.protocol === 'http:')) return false;
+  const h = u.hostname.toLowerCase();
+  if (config.mock) return true;
+  return !(h === 'localhost' || h.endsWith('.local') || h.endsWith('.internal') || /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.)/.test(h) || h.includes(':'));
+}
+
+// ---------- saldo ----------
+function balanceOf(merchantId) {
+  let paid = 0, fees = 0, gross = 0, withdrawn = 0, pendingOut = 0;
+  for (const c of db().charges) {
+    if (c.merchantId !== merchantId || c.status !== 'paid') continue;
+    gross += c.amount; fees += c.fee; paid += c.net;
+  }
+  for (const w of db().withdrawals) {
+    if (w.merchantId !== merchantId) continue;
+    if (w.status === 'paid') withdrawn += w.amount;
+    if (w.status === 'pending') pendingOut += w.amount;
+  }
+  return { available: paid - withdrawn - pendingOut, gross, fees, withdrawn, pendingWithdrawals: pendingOut };
+}
+
+// ---------- formatos públicos ----------
+const merchantName = (id) => db().users.find((u) => u.id === id)?.name || 'Lojista';
+
+const chargeOut = (c) => ({
+  id: c.id, status: c.status, amount: c.amount, fee: c.fee, net_amount: c.net, description: c.description,
+  external_id: c.externalId, payer: c.payer, pix: { copy_paste: c.qrCode },
+  checkout_url: `${config.publicUrl}/pay/${c.id}`, expires_at: c.expiresAt, paid_at: c.paidAt, created_at: c.createdAt,
+});
 
 const publicUser = (u) => ({
-  id: u.id, username: u.username, role: u.role, status: u.status, stock: u.stock,
-  usedTotal: usedTotal(u.id), expiresAt: u.expiresAt || null, expired: isExpired(u),
-  contact: u.contact || '', note: u.note || '', createdAt: u.createdAt, lastLoginAt: u.lastLoginAt || null,
+  id: u.id, role: u.role, status: u.status, name: u.name, email: u.email, username: u.username || null, document: u.document || '',
+  phone: u.phone || '', pixKey: u.pixKey || '', webhookUrl: u.webhookUrl || '', hasWebhookSecret: Boolean(u.webhookSecret),
+  apiKeyPrefix: u.apiKeyPrefix || null, feePercent: u.feePercent ?? config.feePercent, feeMinCents: u.feeMinCents ?? config.feeMinCents,
+  createdAt: u.createdAt, lastLoginAt: u.lastLoginAt || null,
 });
 
-const SOURCES = { manual: 'manual_user', auto: 'auto_schedule', api: 'api_send' };
-const activeScheduleFor = (targetId) => db().schedules.find((x) => x.status === 'active' && x.targetId === targetId);
+const qrCache = new Map();
+async function qrImage(c) {
+  if (c.qrCodeBase64) return c.qrCodeBase64;
+  if (!c.qrCode) return null;
+  if (!qrCache.has(c.id)) qrCache.set(c.id, await QRCode.toDataURL(c.qrCode, { margin: 1, width: 360, errorCorrectionLevel: 'M' }));
+  return qrCache.get(c.id);
+}
 
-function uidUsage(targetId, day = dayKey()) {
-  let used = 0;
-  for (const s of db().sends) {
-    if (s.targetId !== targetId || s.day !== day) continue;
-    if (s.status === 'pending') used += s.amount;
-    else if (s.status === 'success' || s.status === 'unknown') used += s.likesSent ?? s.amount;
+// ---------- cobranças ----------
+async function createCharge(merchant, input, idemKey) {
+  if (idemKey) {
+    const prev = db().idempotency[`${merchant.id}:${idemKey}`];
+    if (prev) { const c = db().charges.find((x) => x.id === prev); if (c) return { status: 200, charge: c }; }
   }
-  return used;
-}
+  const amount = toInt(input.amount);
+  if (!Number.isInteger(amount) || amount < config.minChargeCents || amount > config.maxChargeCents) {
+    return { status: 400, error: `amount deve ser um inteiro em centavos entre ${config.minChargeCents} (${brl(config.minChargeCents)}) e ${config.maxChargeCents} (${brl(config.maxChargeCents)}).` };
+  }
+  const expiresIn = input.expires_in == null ? config.defaultExpiresMin * 60 : toInt(input.expires_in);
+  if (!Number.isInteger(expiresIn) || expiresIn < 300 || expiresIn > 86400) return { status: 400, error: 'expires_in deve ser entre 300 e 86400 segundos.' };
+  const payer = input.payer && typeof input.payer === 'object' ? input.payer : {};
+  if (payer.email && !EMAIL_RE.test(String(payer.email))) return { status: 400, error: 'payer.email inválido.' };
+  if (payer.document && !validDocument(payer.document)) return { status: 400, error: 'payer.document (CPF ou CNPJ) inválido.' };
 
-const allocatedStock = () => db().users.filter((u) => u.role === 'client' && u.status !== 'pending').reduce((sum, u) => sum + u.stock, 0);
-
-async function globalStock(force = false) {
-  const b = await getBalance({ force });
-  const allocated = allocatedStock();
-  const remaining = b.value?.remaining ?? null;
-  return {
-    remaining,
-    allocated,
-    free: remaining == null ? null : remaining - allocated,
-    plan: b.value?.plan_type ?? null,
-    expiry: b.value?.expiry_date ?? null,
-    stockLimit: b.value?.stock_limit ?? null,
-    stockUsed: b.value?.stock_used ?? null,
-    dailyLimit: b.value?.daily_limit ?? null,
-    usedToday: b.value?.used_today ?? null,
-    error: b.error,
-    updatedAt: b.at,
+  const fee = feeFor(amount, merchant);
+  const charge = {
+    id: `ch_${crypto.randomBytes(10).toString('hex')}`, seq: nextId('charge'), merchantId: merchant.id,
+    amount, fee, net: amount - fee, description: String(input.description || '').slice(0, 140) || null,
+    externalId: input.external_id ? String(input.external_id).slice(0, 80) : null,
+    payer: { name: payer.name ? String(payer.name).slice(0, 80) : null, email: payer.email ? String(payer.email).slice(0, 120) : null, document: payer.document ? String(payer.document).replace(/\D/g, '') : null },
+    status: 'pending', provider: provider.name, providerId: null, qrCode: null, qrCodeBase64: null,
+    expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(), paidAt: null, createdAt: now(),
   };
+  try {
+    const p = await provider.createPix({ chargeId: charge.seq, amountCents: amount, description: charge.description, payer: charge.payer, expiresAt: Date.parse(charge.expiresAt) });
+    Object.assign(charge, { providerId: p.providerId, qrCode: p.qrCode, qrCodeBase64: p.qrCodeBase64 });
+  } catch (err) {
+    return { status: err.status || 502, error: err.message };
+  }
+  db().charges.push(charge);
+  if (idemKey) db().idempotency[`${merchant.id}:${idemKey}`] = charge.id;
+  save();
+  enqueue(merchant, 'charge.created', chargeOut(charge));
+  return { status: 201, charge };
 }
 
-const rules = () => ({
-  packSize: config.packSize,
-  pricePerPackCents: config.pricePerPackCents,
-  minPurchase: config.minPurchase,
-  maxPurchase: config.maxPurchase,
-  maxPerSend: config.maxPerSend,
-  dailyLimitPerUid: config.dailyLimitPerUid,
+function markPaid(charge, info = {}) {
+  if (charge.status === 'paid' || charge.status === 'refunded') return false;
+  charge.status = 'paid';
+  charge.paidAt = info.paidAt || now();
+  if (info.payerName && !charge.payer.name) charge.payer.name = info.payerName;
+  save();
+  const merchant = db().users.find((u) => u.id === charge.merchantId);
+  enqueue(merchant, 'charge.paid', chargeOut(charge));
+  return true;
+}
+
+function markStatus(charge, status) {
+  if (charge.status === status) return;
+  charge.status = status;
+  save();
+  const merchant = db().users.find((u) => u.id === charge.merchantId);
+  enqueue(merchant, `charge.${status}`, chargeOut(charge));
+}
+
+async function syncCharge(charge) {
+  if (!charge.providerId || charge.status !== 'pending') return charge;
+  charge.lastSyncAt = Date.now();
+  try {
+    const s = await provider.getStatus(charge.providerId);
+    if (s.status === 'paid') markPaid(charge, s);
+    else if (s.status === 'failed' || s.status === 'refunded') markStatus(charge, s.status);
+  } catch { /* tenta de novo no próximo ciclo */ }
+  if (charge.status === 'pending' && Date.parse(charge.expiresAt) < Date.now()) {
+    markStatus(charge, 'expired');
+    provider.cancel(charge.providerId).catch(() => {});
+  }
+  return charge;
+}
+
+// confere cobranças pendentes periodicamente (garantia caso a notificação do Mercado Pago não chegue)
+let syncing = false;
+async function syncPending() {
+  if (syncing) return;
+  syncing = true;
+  try {
+    const due = db().charges.filter((c) => c.status === 'pending' && (!c.lastSyncAt || Date.now() - c.lastSyncAt > 30000)).slice(0, 25);
+    for (const c of due) await syncCharge(c);
+  } finally {
+    syncing = false;
+  }
+}
+setInterval(syncPending, 15000).unref();
+setInterval(processDeliveries, 5000).unref();
+
+// ---------- autenticação ----------
+app.post('/api/auth/register', (req, res) => {
+  const { name, email, password, document, phone } = req.body || {};
+  if (!name || String(name).trim().length < 3) return res.status(400).json({ error: 'Informe o nome da empresa ou seu nome completo.' });
+  if (!EMAIL_RE.test(String(email || ''))) return res.status(400).json({ error: 'E-mail inválido.' });
+  if (typeof password !== 'string' || password.length < 8) return res.status(400).json({ error: 'A senha precisa ter pelo menos 8 caracteres.' });
+  if (!validDocument(document)) return res.status(400).json({ error: 'CPF ou CNPJ inválido.' });
+  if (findLogin(email)) return res.status(409).json({ error: 'Já existe uma conta com este e-mail.' });
+  if (db().users.filter((u) => u.status === 'pending').length >= 500) return res.status(429).json({ error: 'Muitos cadastros em análise. Tente mais tarde.' });
+  db().users.push({
+    id: nextId('user'), role: 'merchant', status: 'pending', name: String(name).trim().slice(0, 80), email: String(email).trim().toLowerCase(),
+    passwordHash: hashPassword(password), document: String(document).replace(/\D/g, ''), phone: String(phone || '').slice(0, 30),
+    pixKey: '', webhookUrl: '', webhookSecret: newWebhookSecret(), createdAt: now(),
+  });
+  save();
+  res.json({ ok: true, message: 'Cadastro enviado! Avisaremos assim que sua conta for aprovada.' });
 });
 
-const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
-
-// Modelo 3D opcional (public/models/outfit.glb) que substitui o traje procedural.
-app.get('/api/model', (req, res) => {
-  res.json({ url: fs.existsSync(path.join(root, 'public/models/outfit.glb')) ? '/models/outfit.glb' : null });
-});
-
-// ---------- Autenticação ----------
 app.post('/api/auth/login', (req, res) => {
-  const { username, password } = req.body || {};
-  const key = `${req.ip}|${String(username || '').toLowerCase()}`;
+  const { login, password } = req.body || {};
+  const key = `${req.ip}|${String(login || '').toLowerCase()}`;
   const blocked = loginBlocked(key);
   if (blocked) return res.status(429).json({ error: `Muitas tentativas. Aguarde ${blocked} min.` });
-
-  const user = findUser(username);
-  if (!user || typeof password !== 'string' || !verifyPassword(password, user.passwordHash)) {
-    loginFailed(key);
-    return res.status(401).json({ error: 'Usuário ou senha inválidos.' });
-  }
-  if (user.status === 'pending') return res.status(403).json({ error: 'Seu acesso ainda está em análise pelo administrador.' });
-  if (user.status !== 'active') return res.status(403).json({ error: 'Acesso bloqueado. Fale com o administrador.' });
-
+  const user = findLogin(login);
+  if (!user || !verifyPassword(password, user.passwordHash)) { loginFailed(key); return res.status(401).json({ error: 'E-mail ou senha incorretos.' }); }
+  if (user.status === 'pending') return res.status(403).json({ error: 'Sua conta ainda está em análise. Avisaremos quando for aprovada.' });
+  if (user.status !== 'active') return res.status(403).json({ error: 'Conta bloqueada. Fale com o suporte.' });
   loginSucceeded(key);
-  user.lastLoginAt = new Date().toISOString();
+  user.lastLoginAt = now();
   createSession(res, user);
   res.json({ user: publicUser(user) });
 });
 
-app.post('/api/auth/logout', (req, res) => {
-  destroySession(req, res);
+app.post('/api/auth/logout', (req, res) => { destroySession(req, res); res.json({ ok: true }); });
+
+app.get('/api/me', requireAuth, (req, res) => {
+  res.json({ user: publicUser(req.user), mock: config.mock, publicUrl: config.publicUrl, limits: { minCharge: config.minChargeCents, maxCharge: config.maxChargeCents, minWithdrawal: config.minWithdrawalCents } });
+});
+
+// ---------- checkout público ----------
+app.get('/api/public/charges/:id', wrap(async (req, res) => {
+  const c = db().charges.find((x) => x.id === req.params.id);
+  if (!c) return res.status(404).json({ error: 'Cobrança não encontrada.' });
+  if (c.status === 'pending' && (!c.lastSyncAt || Date.now() - c.lastSyncAt > 5000)) await syncCharge(c);
+  res.json({
+    id: c.id, merchant: merchantName(c.merchantId), amount: c.amount, description: c.description, status: c.status,
+    copyPaste: c.status === 'pending' ? c.qrCode : null, qrImage: c.status === 'pending' ? await qrImage(c) : null,
+    expiresAt: c.expiresAt, paidAt: c.paidAt, createdAt: c.createdAt, mock: config.mock,
+  });
+}));
+
+app.post('/api/public/charges/:id/simulate', (req, res) => {
+  if (!config.mock) return res.status(404).json({ error: 'Rota não encontrada.' });
+  const c = db().charges.find((x) => x.id === req.params.id);
+  if (!c || c.status !== 'pending') return res.status(400).json({ error: 'Cobrança não está pendente.' });
+  provider.simulatePayment(c.providerId);
+  markPaid(c, { payerName: 'Pagador Teste' });
   res.json({ ok: true });
 });
 
-// Plataforma fechada: qualquer pessoa pode pedir acesso, mas só entra após aprovação do admin.
-app.post('/api/auth/request', (req, res) => {
-  const { username, password, contact } = req.body || {};
-  if (!USERNAME_RE.test(String(username || ''))) return res.status(400).json({ error: 'Usuário deve ter 3–24 caracteres (letras, números, _ . -).' });
-  if (typeof password !== 'string' || password.length < 6) return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres.' });
-  if (!contact || String(contact).trim().length < 5) return res.status(400).json({ error: 'Informe um contato (WhatsApp, Discord ou e-mail).' });
-  if (findUser(username)) return res.status(409).json({ error: 'Este usuário já existe ou já foi solicitado.' });
-  if (db().users.filter((u) => u.status === 'pending').length >= 200) return res.status(429).json({ error: 'Muitas solicitações pendentes. Tente mais tarde.' });
-
-  db().users.push({
-    id: nextId('user'), username: String(username).trim(), passwordHash: hashPassword(password), role: 'client',
-    status: 'pending', stock: 0, contact: String(contact).trim().slice(0, 120), createdAt: new Date().toISOString(),
-  });
-  save();
-  res.json({ ok: true, message: 'Solicitação enviada! Aguarde a aprovação do administrador.' });
-});
-
-app.get('/api/me', requireAuth, wrap(async (req, res) => {
+// ---------- painel do lojista ----------
+app.get('/api/merchant/overview', requireMerchant, (req, res) => {
+  const mine = db().charges.filter((c) => c.merchantId === req.user.id);
   const today = dayKey();
-  const mine = db().sends.filter((s) => s.userId === req.user.id);
+  const paid = mine.filter((c) => c.status === 'paid');
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const k = dayKey(new Date(Date.now() - i * 86400000));
+    const list = paid.filter((c) => dayKey(new Date(c.paidAt)) === k);
+    days.push({ day: k, amount: list.reduce((a, c) => a + c.amount, 0), count: list.length });
+  }
+  const todayPaid = paid.filter((c) => dayKey(new Date(c.paidAt)) === today);
+  const closed = mine.filter((c) => c.status !== 'pending');
   res.json({
-    user: publicUser(req.user),
-    rules: rules(),
-    global: await globalStock(),
-    apiKey: req.user.role === 'client' ? req.user.apiKey || null : null,
-    stats: {
-      sentToday: mine.filter((s) => s.day === today && s.status === 'success').reduce((a, s) => a + s.likesSent, 0),
-      sentTotal: mine.filter((s) => s.status === 'success').reduce((a, s) => a + s.likesSent, 0),
-      activeSchedules: db().schedules.filter((x) => x.userId === req.user.id && x.status === 'active').length,
-      sendsCount: mine.length,
-      pendingOrders: db().orders.filter((o) => o.userId === req.user.id && o.status === 'pending').length,
-    },
-    settings: { pixKey: db().settings.pixKey, pixHolder: db().settings.pixHolder, contact: db().settings.contact, paymentNote: db().settings.paymentNote },
-    mock: config.mock,
+    balance: balanceOf(req.user.id),
+    today: { amount: todayPaid.reduce((a, c) => a + c.amount, 0), count: todayPaid.length },
+    conversion: closed.length ? Math.round((paid.length / closed.length) * 100) : null,
+    pending: mine.filter((c) => c.status === 'pending').length,
+    days,
+    recent: mine.slice(-6).reverse().map(chargeOut),
   });
-}));
+});
 
-// ---------- Jogador ----------
-const playerCache = new Map();
-
-app.get('/api/player/:uid', requireAuth, wrap(async (req, res) => {
-  const uid = req.params.uid;
-  if (!UID_RE.test(uid)) return res.status(400).json({ error: 'ID inválido. Use apenas números.' });
-  const cached = playerCache.get(uid);
-  if (cached && Date.now() - cached.at < 60000) return res.json(cached.value);
-  const raw = await likeApi.player(uid);
-  const info = raw?.basicInfo || {};
-  const value = {
-    uid,
-    nickname: info.nickname || null,
-    region: info.region || null,
-    liked: info.liked ?? null,
-    level: info.level ?? null,
-    usedToday: uidUsage(uid),
-    dailyLimit: config.dailyLimitPerUid,
-  };
-  playerCache.set(uid, { at: Date.now(), value });
-  res.json(value);
-}));
-
-// ---------- Envio de likes ----------
-// Um único caminho para envio manual, Auto Likes e API pública.
-// Retorna { status, body } prontos para responder.
-async function performSend(user, targetIdRaw, amountRaw, source = 'manual', scheduleId = null) {
-  const targetId = String(targetIdRaw ?? '').trim();
-  let amount = toInt(amountRaw);
-  const fail = (status, error, extra = {}) => ({ status, body: { error, ...extra } });
-
-  if (!UID_RE.test(targetId)) return fail(400, 'Informe um ID válido (somente números).');
-  if (!Number.isInteger(amount) || amount < 1 || amount > config.maxPerSend) {
-    return fail(400, `A quantidade deve ser entre 1 e ${config.maxPerSend.toLocaleString('pt-BR')} likes.`);
-  }
-  if (user.status !== 'active') return fail(403, 'Conta desativada pelo administrador.');
-  if (isExpired(user)) return fail(403, 'Seu acesso expirou. Renove seu plano com o administrador.');
-  if (source !== 'auto' && activeScheduleFor(targetId)) {
-    return fail(400, 'Este ID está com Auto Likes ativo. Envios manuais ficam bloqueados enquanto o agendamento estiver em execução.');
-  }
-  const global = await getBalance();
-  if (global.value && global.value.remaining < amount) return fail(400, 'Estoque global insuficiente no momento. Avise o administrador.');
-
-  // A partir daqui não há await até a reserva: checagem e débito são atômicos.
-  const isClient = user.role === 'client';
-  const used = uidUsage(targetId);
-  const left = config.dailyLimitPerUid - used;
-  if (source === 'auto' && left > 0 && amount > left) amount = left; // agendamento envia o que ainda cabe hoje
-  if (amount > left) {
-    return fail(400, left > 0
-      ? `Este ID já recebeu ${used.toLocaleString('pt-BR')} likes hoje. Restam ${left.toLocaleString('pt-BR')} para hoje.`
-      : 'Este ID já atingiu o limite de 2.000 likes hoje. Tente novamente amanhã.');
-  }
-  if (isClient && user.stock < amount) {
-    return fail(400, `Estoque insuficiente. Você tem ${user.stock.toLocaleString('pt-BR')} likes.`);
-  }
-  const send = {
-    id: nextId('send'), userId: user.id, username: user.username, targetId, amount, likesSent: 0,
-    status: 'pending', source, scheduleId, day: dayKey(), createdAt: new Date().toISOString(),
-  };
-  if (isClient) user.stock -= amount;
-  db().sends.push(send);
-  save();
-
-  let errorStatus = 502;
-  try {
-    const r = await likeApi.sendLikes(targetId, amount);
-    const sent = Math.max(0, Math.min(amount, Number(r?.likes_sent ?? amount)));
-    send.status = 'success';
-    send.likesSent = sent;
-    send.nickname = r?.player_nickname || null;
-    send.remoteLogId = r?.log_id ?? null;
-    if (isClient && sent < amount) user.stock += amount - sent;
-    updateRemaining(Number(r?.remaining));
-  } catch (err) {
-    send.status = 'error';
-    send.error = err.message;
-    errorStatus = err.status === 400 ? 400 : 502;
-    if (isClient) user.stock += amount;
-  } finally {
-    send.finishedAt = new Date().toISOString();
-    save();
-  }
-  if (send.status === 'error') return fail(errorStatus, send.error, { send, stock: user.stock });
-  return { status: 200, body: { send, stock: user.stock, usedToday: uidUsage(targetId) } };
-}
-
-app.post('/api/send', requireAuth, wrap(async (req, res) => {
-  const r = await performSend(req.user, req.body?.target_id, req.body?.amount, 'manual');
-  res.status(r.status).json(r.body);
-}));
-
-// Histórico com filtros: origem (manual | auto | api) e janela em dias.
-app.get('/api/sends', requireAuth, (req, res) => {
-  const days = Math.min(90, Math.max(1, toInt(req.query.days) || 30));
+app.get('/api/merchant/charges', requireMerchant, (req, res) => {
+  const status = String(req.query.status || '');
+  const q = String(req.query.q || '').trim().toLowerCase();
+  const days = Math.min(365, Math.max(1, toInt(req.query.days) || 30));
   const since = Date.now() - days * 86400000;
-  const source = ['manual', 'auto', 'api'].includes(req.query.source) ? req.query.source : null;
-  const list = db().sends
-    .filter((s) => s.userId === req.user.id && Date.parse(s.createdAt) >= since && (!source || (s.source || 'manual') === source))
-    .slice(-500).reverse();
-  res.json({ sends: list });
+  const list = db().charges.filter((c) => c.merchantId === req.user.id && Date.parse(c.createdAt) >= since && (!status || c.status === status)
+    && (!q || [c.id, c.description, c.externalId, c.payer.name, c.payer.email].some((v) => v && String(v).toLowerCase().includes(q))));
+  res.json({ charges: list.slice(-500).reverse().map(chargeOut), total: list.filter((c) => c.status === 'paid').reduce((a, c) => a + c.amount, 0) });
 });
 
-// ---------- Auto Likes (agendamentos diários) ----------
-const pad = (n) => String(n).padStart(2, '0');
-// Horário de Brasília (UTC-3, sem horário de verão desde 2019).
-function nextRunFrom(hour, minute, after = Date.now()) {
-  let t = Date.parse(`${dayKey(new Date(after))}T${pad(hour)}:${pad(minute)}:00-03:00`);
-  while (t <= after) t += 86400000;
-  return t;
-}
-const publicSchedule = (x) => ({ ...x, nextRunAt: x.status === 'active' ? new Date(x.nextRunAt).toISOString() : null });
+app.post('/api/merchant/charges', requireMerchant, wrap(async (req, res) => {
+  const r = await createCharge(req.user, req.body || {});
+  if (r.error) return res.status(r.status).json({ error: r.error });
+  res.status(201).json({ charge: chargeOut(r.charge), qrImage: await qrImage(r.charge) });
+}));
 
-app.get('/api/schedules', requireAuth, (req, res) => {
-  const list = db().schedules.filter((x) => x.userId === req.user.id).slice().reverse().map(publicSchedule);
-  res.json({ schedules: list });
+app.get('/api/merchant/charges/:id', requireMerchant, wrap(async (req, res) => {
+  const c = db().charges.find((x) => x.id === req.params.id && x.merchantId === req.user.id);
+  if (!c) return res.status(404).json({ error: 'Cobrança não encontrada.' });
+  await syncCharge(c);
+  const events = db().deliveries.filter((d) => d.payload?.data?.id === c.id).map((d) => ({ event: d.event, status: d.status, attempts: d.attempts, lastCode: d.lastCode, lastError: d.lastError, at: d.lastAttemptAt || d.createdAt }));
+  res.json({ charge: chargeOut(c), qrImage: c.status === 'pending' ? await qrImage(c) : null, webhooks: events });
+}));
+
+app.post('/api/merchant/charges/:id/cancel', requireMerchant, wrap(async (req, res) => {
+  const c = db().charges.find((x) => x.id === req.params.id && x.merchantId === req.user.id);
+  if (!c) return res.status(404).json({ error: 'Cobrança não encontrada.' });
+  if (c.status !== 'pending') return res.status(400).json({ error: 'Só é possível cancelar cobranças pendentes.' });
+  await provider.cancel(c.providerId).catch(() => {});
+  markStatus(c, 'canceled');
+  res.json({ charge: chargeOut(c) });
+}));
+
+app.post('/api/merchant/charges/:id/simulate', requireMerchant, (req, res) => {
+  if (!config.mock) return res.status(404).json({ error: 'Rota não encontrada.' });
+  const c = db().charges.find((x) => x.id === req.params.id && x.merchantId === req.user.id);
+  if (!c || c.status !== 'pending') return res.status(400).json({ error: 'Cobrança não está pendente.' });
+  provider.simulatePayment(c.providerId);
+  markPaid(c, { payerName: 'Pagador Teste' });
+  res.json({ charge: chargeOut(c) });
 });
 
-app.post('/api/schedules', requireAuth, (req, res) => {
-  const user = req.user;
-  const targetId = String(req.body?.target_id ?? '').trim();
-  const perDay = toInt(req.body?.per_day);
-  const days = toInt(req.body?.days);
-  const hour = toInt(req.body?.hour);
-  const minute = toInt(req.body?.minute ?? 0);
-  if (!UID_RE.test(targetId)) return res.status(400).json({ error: 'Informe um ID válido (somente números).' });
-  if (!Number.isInteger(perDay) || perDay < 1 || perDay > config.dailyLimitPerUid) return res.status(400).json({ error: 'Quantidade por dia deve ser entre 1 e 2.000.' });
-  if (!Number.isInteger(days) || days < 1 || days > 30) return res.status(400).json({ error: 'Duração deve ser entre 1 e 30 dias.' });
-  if (!Number.isInteger(hour) || hour < 0 || hour > 23 || !Number.isInteger(minute) || minute < 0 || minute > 59) {
-    return res.status(400).json({ error: 'Horário inválido. Use hora de 0 a 23 e minuto de 0 a 59.' });
-  }
-  if (isExpired(user)) return res.status(403).json({ error: 'Seu acesso expirou. Renove seu plano com o administrador.' });
-  if (activeScheduleFor(targetId)) return res.status(409).json({ error: 'Este ID já tem um Auto Likes ativo.' });
-  if (user.role === 'client' && user.stock < perDay) return res.status(400).json({ error: `Estoque insuficiente para o primeiro envio (${perDay.toLocaleString('pt-BR')} likes).` });
-  if (db().schedules.filter((x) => x.userId === user.id && x.status === 'active').length >= 20) return res.status(400).json({ error: 'Limite de 20 agendamentos ativos.' });
+app.get('/api/merchant/withdrawals', requireMerchant, (req, res) => {
+  res.json({ withdrawals: db().withdrawals.filter((w) => w.merchantId === req.user.id).slice().reverse(), balance: balanceOf(req.user.id) });
+});
 
-  const schedule = {
-    id: nextId('schedule'), userId: user.id, username: user.username, targetId, perDay, days, hour, minute,
-    runsDone: 0, likesSent: 0, status: 'active', nextRunAt: nextRunFrom(hour, minute), lastRun: null, createdAt: new Date().toISOString(),
-  };
-  db().schedules.push(schedule);
+app.post('/api/merchant/withdrawals', requireMerchant, (req, res) => {
+  const amount = toInt(req.body?.amount);
+  const pixKey = String(req.body?.pixKey || req.user.pixKey || '').trim();
+  const bal = balanceOf(req.user.id);
+  if (!Number.isInteger(amount) || amount < config.minWithdrawalCents) return res.status(400).json({ error: `O saque mínimo é ${brl(config.minWithdrawalCents)}.` });
+  if (amount > bal.available) return res.status(400).json({ error: `Saldo disponível insuficiente (${brl(bal.available)}).` });
+  if (pixKey.length < 5) return res.status(400).json({ error: 'Informe a chave PIX que vai receber o saque.' });
+  if (db().withdrawals.filter((w) => w.merchantId === req.user.id && w.status === 'pending').length >= 3) return res.status(400).json({ error: 'Você já tem 3 saques em análise.' });
+  const w = { id: nextId('withdrawal'), merchantId: req.user.id, merchant: req.user.name, amount, pixKey: pixKey.slice(0, 120), status: 'pending', note: null, createdAt: now(), closedAt: null };
+  db().withdrawals.push(w);
   save();
-  res.json({ schedule: publicSchedule(schedule) });
+  enqueue(req.user, 'withdrawal.requested', w);
+  res.status(201).json({ withdrawal: w, balance: balanceOf(req.user.id) });
 });
 
-app.post('/api/schedules/:id/cancel', requireAuth, (req, res) => {
-  const x = db().schedules.find((s) => s.id === Number(req.params.id) && (s.userId === req.user.id || req.user.role === 'admin'));
-  if (!x) return res.status(404).json({ error: 'Agendamento não encontrado.' });
-  if (x.status !== 'active') return res.status(400).json({ error: 'Este agendamento já terminou.' });
-  x.status = 'canceled';
-  save();
-  res.json({ schedule: publicSchedule(x) });
-});
-
-let schedulerBusy = false;
-async function runSchedules() {
-  if (schedulerBusy) return;
-  schedulerBusy = true;
-  try {
-    const now = Date.now();
-    for (const x of db().schedules.filter((s) => s.status === 'active' && s.nextRunAt <= now)) {
-      const user = db().users.find((u) => u.id === x.userId);
-      if (!user || user.status !== 'active') { x.status = 'canceled'; continue; }
-      const r = await performSend(user, x.targetId, x.perDay, 'auto', x.id);
-      x.runsDone += 1;
-      x.lastRun = { at: new Date().toISOString(), ok: r.status === 200, sent: r.body.send?.likesSent ?? 0, error: r.status === 200 ? null : r.body.error };
-      x.likesSent += x.lastRun.sent;
-      if (x.runsDone >= x.days) x.status = 'done';
-      else x.nextRunAt = nextRunFrom(x.hour, x.minute, Math.max(now, x.nextRunAt));
-    }
-  } catch (err) {
-    console.error('Erro no Auto Likes:', err);
-  } finally {
-    save();
-    schedulerBusy = false;
+app.put('/api/merchant/settings', requireMerchant, (req, res) => {
+  const u = req.user, b = req.body || {};
+  if (b.webhookUrl !== undefined) {
+    const url = String(b.webhookUrl).trim();
+    if (!validWebhookUrl(url)) return res.status(400).json({ error: 'URL de webhook inválida. Use um endereço https público.' });
+    u.webhookUrl = url;
   }
-}
-setInterval(runSchedules, 30000).unref();
+  if (b.pixKey !== undefined) u.pixKey = String(b.pixKey).trim().slice(0, 120);
+  if (b.phone !== undefined) u.phone = String(b.phone).slice(0, 30);
+  if (b.name !== undefined && String(b.name).trim().length >= 3) u.name = String(b.name).trim().slice(0, 80);
+  if (b.newPassword !== undefined) {
+    if (!verifyPassword(b.currentPassword, u.passwordHash)) return res.status(400).json({ error: 'Senha atual incorreta.' });
+    if (String(b.newPassword).length < 8) return res.status(400).json({ error: 'A nova senha precisa ter pelo menos 8 caracteres.' });
+    u.passwordHash = hashPassword(b.newPassword);
+  }
+  save();
+  res.json({ user: publicUser(u) });
+});
 
-// ---------- API pública dos clientes (mesmo formato da documentação) ----------
-const apiHits = new Map();
-function apiKeyAuth(req, res, next) {
-  const key = String(req.get('X-Api-Key') || '');
-  const user = key && db().users.find((u) => u.apiKey && u.apiKey.length === key.length && crypto.timingSafeEqual(Buffer.from(u.apiKey), Buffer.from(key)));
-  if (!user) return res.status(401).json({ error: 'Header X-Api-Key ausente ou com valor inválido.' });
-  if (user.status !== 'active') return res.status(403).json({ error: 'Conta desativada pelo administrador.' });
-  if (isExpired(user)) return res.status(403).json({ error: 'Conta com data de expiração ultrapassada. Entre em contato com o suporte.' });
+app.post('/api/merchant/apikey', requireMerchant, (req, res) => {
+  const key = issueApiKey(req.user);
+  save();
+  res.json({ apiKey: key, prefix: req.user.apiKeyPrefix });
+});
+
+app.post('/api/merchant/webhook-secret', requireMerchant, (req, res) => {
+  req.user.webhookSecret = newWebhookSecret();
+  save();
+  res.json({ secret: req.user.webhookSecret });
+});
+
+app.get('/api/merchant/webhook-secret', requireMerchant, (req, res) => res.json({ secret: req.user.webhookSecret }));
+
+app.post('/api/merchant/webhook-test', requireMerchant, wrap(async (req, res) => {
+  if (!req.user.webhookUrl) return res.status(400).json({ error: 'Cadastre a URL do webhook primeiro.' });
+  const d = enqueue(req.user, 'test.ping', { message: 'Webhook do Zyropay funcionando.', merchant: req.user.name });
+  await deliverNow(d);
+  res.json({ ok: d.status === 'delivered', code: d.lastCode, error: d.lastError });
+}));
+
+app.get('/api/merchant/deliveries', requireMerchant, (req, res) => {
+  res.json({ deliveries: db().deliveries.filter((d) => d.merchantId === req.user.id).slice(-50).reverse().map((d) => ({ id: d.id, event: d.event, status: d.status, attempts: d.attempts, lastCode: d.lastCode, lastError: d.lastError, at: d.lastAttemptAt || d.createdAt, ref: d.payload?.data?.id || null })) });
+});
+
+// ---------- API pública v1 ----------
+const hits = new Map();
+function apiAuth(req, res, next) {
+  const header = req.get('Authorization') || '';
+  const key = header.startsWith('Bearer ') ? header.slice(7).trim() : String(req.get('X-Api-Key') || '');
+  const user = userByApiKey(key);
+  if (!user) return res.status(401).json({ error: 'API key ausente ou inválida.' });
+  if (user.status !== 'active') return res.status(403).json({ error: 'Conta desativada.' });
   const minute = Math.floor(Date.now() / 60000);
-  const hit = apiHits.get(user.id);
-  const count = hit && hit.minute === minute ? hit.count + 1 : 1;
-  apiHits.set(user.id, { minute, count });
-  if (count > 60) return res.status(429).json({ error: 'Muitas requisições. Limite de 60 por minuto.' });
+  const h = hits.get(user.id);
+  const count = h && h.minute === minute ? h.count + 1 : 1;
+  hits.set(user.id, { minute, count });
+  if (count > 120) return res.status(429).json({ error: 'Limite de 120 requisições por minuto.' });
   req.user = user;
   next();
 }
 
-app.post('/api/me/apikey', requireAuth, (req, res) => {
-  if (req.user.role !== 'client') return res.status(400).json({ error: 'A API é para contas de cliente.' });
-  req.user.apiKey = `ls_${crypto.randomBytes(24).toString('hex')}`;
-  save();
-  res.json({ apiKey: req.user.apiKey });
-});
-
-app.post('/api/v1/likes/send', apiKeyAuth, wrap(async (req, res) => {
-  const r = await performSend(req.user, req.body?.target_id, req.body?.amount, 'api');
-  if (r.status !== 200) return res.status(r.status === 502 ? 500 : r.status).json({ error: r.body.error });
-  const { send, stock } = r.body;
-  res.json({ likes_sent: send.likesSent, remaining: stock, player_nickname: send.nickname, log_id: send.id });
+const v1 = express.Router();
+v1.use(apiAuth);
+v1.post('/charges', wrap(async (req, res) => {
+  const r = await createCharge(req.user, req.body || {}, req.get('Idempotency-Key'));
+  if (r.error) return res.status(r.status).json({ error: r.error });
+  res.status(r.status).json({ ...chargeOut(r.charge), pix: { copy_paste: r.charge.qrCode, qr_code_image: await qrImage(r.charge) } });
 }));
-
-app.get('/api/v1/balance', apiKeyAuth, (req, res) => {
-  const u = req.user;
-  const used = usedTotal(u.id);
-  const today = dayKey();
-  res.json({
-    plan_type: 'stock', remaining: u.stock, stock_limit: used + u.stock, stock_used: used, daily_limit: 0,
-    used_today: db().sends.filter((s) => s.userId === u.id && s.day === today && s.status === 'success').reduce((a, s) => a + s.likesSent, 0),
-    expiry_date: u.expiresAt || null,
-  });
-});
-
-app.get('/api/v1/logs', apiKeyAuth, (req, res) => {
+v1.get('/charges', (req, res) => {
   const limit = Math.min(100, Math.max(1, toInt(req.query.limit) || 20));
-  const days = Math.min(30, Math.max(1, toInt(req.query.days) || 7));
-  const since = Date.now() - days * 86400000;
-  const logs = db().sends.filter((s) => s.userId === req.user.id && Date.parse(s.createdAt) >= since && s.status !== 'pending')
-    .slice(-limit).reverse()
-    .map((s) => ({ log_id: s.id, target_id: s.targetId, likes_sent: s.likesSent, status: s.status === 'success' ? 'success' : 'error', action: SOURCES[s.source || 'manual'], timestamp: s.createdAt.slice(0, 19) }));
-  res.json(logs);
+  const status = String(req.query.status || '');
+  res.json({ data: db().charges.filter((c) => c.merchantId === req.user.id && (!status || c.status === status)).slice(-limit).reverse().map(chargeOut) });
 });
+v1.get('/charges/:id', wrap(async (req, res) => {
+  const c = db().charges.find((x) => (x.id === req.params.id || x.externalId === req.params.id) && x.merchantId === req.user.id);
+  if (!c) return res.status(404).json({ error: 'Cobrança não encontrada.' });
+  await syncCharge(c);
+  res.json(chargeOut(c));
+}));
+v1.post('/charges/:id/cancel', wrap(async (req, res) => {
+  const c = db().charges.find((x) => x.id === req.params.id && x.merchantId === req.user.id);
+  if (!c) return res.status(404).json({ error: 'Cobrança não encontrada.' });
+  if (c.status !== 'pending') return res.status(400).json({ error: 'Só é possível cancelar cobranças pendentes.' });
+  await provider.cancel(c.providerId).catch(() => {});
+  markStatus(c, 'canceled');
+  res.json(chargeOut(c));
+}));
+v1.get('/balance', (req, res) => {
+  const b = balanceOf(req.user.id);
+  res.json({ available: b.available, pending_withdrawals: b.pendingWithdrawals, total_received: b.gross, total_fees: b.fees, total_withdrawn: b.withdrawn, currency: 'BRL' });
+});
+app.use('/v1', express.json({ limit: '64kb' }), v1);
 
-app.get('/api/v1/player/:uid', apiKeyAuth, wrap(async (req, res) => {
-  if (!UID_RE.test(req.params.uid)) return res.status(400).json({ error: 'UID inválido.' });
-  try {
-    res.json(await likeApi.player(req.params.uid));
-  } catch {
-    res.status(500).json({ error: 'Erro ao buscar jogador' });
-  }
+// ---------- notificações do Mercado Pago ----------
+app.post('/webhooks/mercadopago', wrap(async (req, res) => {
+  const dataId = req.query['data.id'] || req.body?.data?.id;
+  const type = req.query.type || req.body?.type;
+  if (!dataId || (type && type !== 'payment')) return res.sendStatus(200);
+  if (!provider.verifyWebhook({ signature: req.get('x-signature'), requestId: req.get('x-request-id'), dataId })) return res.sendStatus(401);
+  const c = db().charges.find((x) => x.providerId === String(dataId));
+  if (c) await syncCharge(c);
+  res.sendStatus(200);
 }));
 
-// ---------- Pedidos de estoque ----------
-app.post('/api/orders', requireAuth, (req, res) => {
-  if (req.user.role !== 'client') return res.status(400).json({ error: 'Admin não precisa comprar estoque.' });
-  const likes = toInt(req.body?.likes);
-  if (!Number.isInteger(likes) || likes < config.minPurchase) {
-    return res.status(400).json({ error: `O mínimo por pedido é ${config.minPurchase.toLocaleString('pt-BR')} likes.` });
-  }
-  if (likes % config.packSize !== 0) return res.status(400).json({ error: 'A quantidade deve ser múltipla de 2.000 likes.' });
-  if (likes > config.maxPurchase) return res.status(400).json({ error: `Máximo de ${config.maxPurchase.toLocaleString('pt-BR')} likes por pedido.` });
-  const pending = db().orders.filter((o) => o.userId === req.user.id && o.status === 'pending').length;
-  if (pending >= 3) return res.status(400).json({ error: 'Você já tem 3 pedidos aguardando pagamento.' });
-
-  const order = {
-    id: nextId('order'), userId: req.user.id, username: req.user.username, likes, priceCents: priceCents(likes),
-    status: 'pending', createdAt: new Date().toISOString(),
-  };
-  db().orders.push(order);
-  save();
-  res.json({ order });
-});
-
-app.get('/api/orders', requireAuth, (req, res) => {
-  res.json({ orders: db().orders.filter((o) => o.userId === req.user.id).slice().reverse() });
-});
-
-app.post('/api/orders/:id/cancel', requireAuth, (req, res) => {
-  const order = db().orders.find((o) => o.id === Number(req.params.id) && o.userId === req.user.id);
-  if (!order) return res.status(404).json({ error: 'Pedido não encontrado.' });
-  if (order.status !== 'pending') return res.status(400).json({ error: 'Só é possível cancelar pedidos pendentes.' });
-  order.status = 'canceled';
-  order.closedAt = new Date().toISOString();
-  save();
-  res.json({ order });
-});
-
-// ---------- Administração ----------
-app.get('/api/admin/overview', requireAdmin, wrap(async (req, res) => {
-  const today = dayKey();
+// ---------- administração ----------
+app.get('/api/admin/overview', requireAdmin, (req, res) => {
   const data = db();
-  const clients = data.users.filter((u) => u.role === 'client');
-  const todaySends = data.sends.filter((s) => s.day === today);
+  const today = dayKey();
+  const paid = data.charges.filter((c) => c.status === 'paid');
+  const merchants = data.users.filter((u) => u.role === 'merchant');
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const k = dayKey(new Date(Date.now() - i * 86400000));
+    const list = paid.filter((c) => dayKey(new Date(c.paidAt)) === k);
+    days.push({ day: k, amount: list.reduce((a, c) => a + c.amount, 0), fees: list.reduce((a, c) => a + c.fee, 0) });
+  }
+  const todayPaid = paid.filter((c) => dayKey(new Date(c.paidAt)) === today);
   res.json({
-    global: await globalStock(req.query.refresh === '1'),
-    rules: rules(),
-    counts: {
-      clients: clients.filter((u) => u.status !== 'pending').length,
-      active: clients.filter((u) => u.status === 'active').length,
-      requests: clients.filter((u) => u.status === 'pending').length,
-      pendingOrders: data.orders.filter((o) => o.status === 'pending').length,
-    },
-    today: {
-      likes: todaySends.filter((s) => s.status === 'success').reduce((a, s) => a + s.likesSent, 0),
-      sends: todaySends.length,
-      errors: todaySends.filter((s) => s.status === 'error').length,
-    },
-    revenueCents: data.orders.filter((o) => o.status === 'paid').reduce((a, o) => a + o.priceCents, 0),
-    mock: config.mock,
+    tpv: paid.reduce((a, c) => a + c.amount, 0),
+    revenue: paid.reduce((a, c) => a + c.fee, 0),
+    today: { amount: todayPaid.reduce((a, c) => a + c.amount, 0), fees: todayPaid.reduce((a, c) => a + c.fee, 0), count: todayPaid.length },
+    owed: merchants.reduce((a, m) => a + balanceOf(m.id).available + balanceOf(m.id).pendingWithdrawals, 0),
+    pendingWithdrawals: data.withdrawals.filter((w) => w.status === 'pending').length,
+    merchants: { active: merchants.filter((m) => m.status === 'active').length, pending: merchants.filter((m) => m.status === 'pending').length },
+    days,
+    provider: provider.name,
   });
-}));
-
-app.get('/api/admin/users', requireAdmin, (req, res) => {
-  res.json({ users: db().users.filter((u) => u.role === 'client').map(publicUser).reverse() });
 });
 
-app.post('/api/admin/users', requireAdmin, (req, res) => {
-  const { username, password, contact, note } = req.body || {};
-  const stock = toInt(req.body?.stock ?? 0);
-  if (!USERNAME_RE.test(String(username || ''))) return res.status(400).json({ error: 'Usuário deve ter 3–24 caracteres (letras, números, _ . -).' });
-  if (typeof password !== 'string' || password.length < 6) return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres.' });
-  if (findUser(username)) return res.status(409).json({ error: 'Usuário já existe.' });
-  if (!Number.isInteger(stock) || stock < 0) return res.status(400).json({ error: 'Estoque inicial inválido.' });
-  const user = {
-    id: nextId('user'), username: String(username).trim(), passwordHash: hashPassword(password), role: 'client', status: 'active',
-    stock, contact: String(contact || '').slice(0, 120), note: String(note || '').slice(0, 200), createdAt: new Date().toISOString(),
-  };
-  db().users.push(user);
-  save();
-  res.json({ user: publicUser(user) });
+app.get('/api/admin/merchants', requireAdmin, (req, res) => {
+  res.json({ merchants: db().users.filter((u) => u.role === 'merchant').slice().reverse().map((u) => ({ ...publicUser(u), balance: balanceOf(u.id) })) });
 });
 
-app.patch('/api/admin/users/:id', requireAdmin, (req, res) => {
-  const user = db().users.find((u) => u.id === Number(req.params.id) && u.role === 'client');
-  if (!user) return res.status(404).json({ error: 'Cliente não encontrado.' });
+app.patch('/api/admin/merchants/:id', requireAdmin, (req, res) => {
+  const u = db().users.find((x) => x.id === Number(req.params.id) && x.role === 'merchant');
+  if (!u) return res.status(404).json({ error: 'Lojista não encontrado.' });
   const b = req.body || {};
   if (b.status !== undefined) {
     if (!['active', 'blocked'].includes(b.status)) return res.status(400).json({ error: 'Status inválido.' });
-    user.status = b.status;
-    if (b.status === 'blocked') destroyUserSessions(user.id);
+    u.status = b.status;
+    if (b.status === 'blocked') destroyUserSessions(u.id);
   }
-  if (b.password !== undefined) {
-    if (typeof b.password !== 'string' || b.password.length < 6) return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres.' });
-    user.passwordHash = hashPassword(b.password);
-    destroyUserSessions(user.id);
+  if (b.feePercent !== undefined) {
+    const p = Number(b.feePercent);
+    if (!(p >= 0 && p <= 20)) return res.status(400).json({ error: 'Taxa deve ser entre 0% e 20%.' });
+    u.feePercent = Math.round(p * 100) / 100;
   }
-  if (b.stockDelta !== undefined) {
-    const delta = toInt(b.stockDelta);
-    if (!Number.isInteger(delta) || user.stock + delta < 0) return res.status(400).json({ error: 'Ajuste de estoque inválido.' });
-    user.stock += delta;
+  if (b.feeMinCents !== undefined) {
+    const m = toInt(b.feeMinCents);
+    if (!Number.isInteger(m) || m < 0 || m > 1000) return res.status(400).json({ error: 'Taxa mínima deve ser entre R$ 0,00 e R$ 10,00.' });
+    u.feeMinCents = m;
   }
-  if (b.expiresAt !== undefined) {
-    if (b.expiresAt !== null && !DATE_RE.test(String(b.expiresAt))) return res.status(400).json({ error: 'Data de validade inválida.' });
-    user.expiresAt = b.expiresAt || null;
-  }
-  if (b.note !== undefined) user.note = String(b.note).slice(0, 200);
-  if (b.contact !== undefined) user.contact = String(b.contact).slice(0, 120);
   save();
-  res.json({ user: publicUser(user) });
+  res.json({ merchant: { ...publicUser(u), balance: balanceOf(u.id) } });
 });
 
-app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
+app.delete('/api/admin/merchants/:id', requireAdmin, (req, res) => {
   const data = db();
-  const i = data.users.findIndex((u) => u.id === Number(req.params.id) && u.role === 'client');
-  if (i < 0) return res.status(404).json({ error: 'Cliente não encontrado.' });
-  destroyUserSessions(data.users[i].id);
+  const i = data.users.findIndex((x) => x.id === Number(req.params.id) && x.role === 'merchant' && x.status === 'pending');
+  if (i < 0) return res.status(400).json({ error: 'Só é possível recusar cadastros em análise.' });
   data.users.splice(i, 1);
   save();
   res.json({ ok: true });
 });
 
-app.get('/api/admin/orders', requireAdmin, (req, res) => {
-  res.json({ orders: db().orders.slice().reverse().slice(0, 500) });
+app.get('/api/admin/charges', requireAdmin, (req, res) => {
+  const status = String(req.query.status || '');
+  const list = db().charges.filter((c) => !status || c.status === status).slice(-500).reverse();
+  res.json({ charges: list.map((c) => ({ ...chargeOut(c), merchant: merchantName(c.merchantId), provider: c.provider, provider_id: c.providerId })) });
 });
 
-app.post('/api/admin/orders/:id/:action', requireAdmin, wrap(async (req, res) => {
-  const order = db().orders.find((o) => o.id === Number(req.params.id));
-  if (!order) return res.status(404).json({ error: 'Pedido não encontrado.' });
-  if (order.status !== 'pending') return res.status(400).json({ error: 'Pedido já finalizado.' });
-  const { action } = req.params;
-
-  if (action === 'approve') {
-    const user = db().users.find((u) => u.id === order.userId);
-    if (!user) return res.status(404).json({ error: 'O cliente deste pedido não existe mais.' });
-    const g = await globalStock(true);
-    if (g.free != null && order.likes > g.free && !req.body?.force) {
-      return res.status(409).json({
-        error: `Estoque global livre (${g.free.toLocaleString('pt-BR')}) menor que o pedido (${order.likes.toLocaleString('pt-BR')}). Recarregue a API ou confirme mesmo assim.`,
-        needsForce: true,
-      });
-    }
-    user.stock += order.likes;
-    order.status = 'paid';
-  } else if (action === 'reject') {
-    order.status = 'rejected';
-  } else {
-    return res.status(400).json({ error: 'Ação inválida.' });
-  }
-  order.closedAt = new Date().toISOString();
-  save();
-  res.json({ order });
+app.post('/api/admin/charges/:id/refund', requireAdmin, wrap(async (req, res) => {
+  const c = db().charges.find((x) => x.id === req.params.id);
+  if (!c) return res.status(404).json({ error: 'Cobrança não encontrada.' });
+  if (c.status !== 'paid') return res.status(400).json({ error: 'Só é possível devolver cobranças pagas.' });
+  if (balanceOf(c.merchantId).available < c.net) return res.status(400).json({ error: 'O lojista não tem saldo disponível para cobrir a devolução.' });
+  await provider.refund(c.providerId);
+  markStatus(c, 'refunded');
+  res.json({ charge: chargeOut(c) });
 }));
 
-app.post('/api/admin/requests/:id/:action', requireAdmin, (req, res) => {
-  const data = db();
-  const i = data.users.findIndex((u) => u.id === Number(req.params.id) && u.status === 'pending');
-  if (i < 0) return res.status(404).json({ error: 'Solicitação não encontrada.' });
-  if (req.params.action === 'approve') data.users[i].status = 'active';
-  else if (req.params.action === 'reject') data.users.splice(i, 1);
-  else return res.status(400).json({ error: 'Ação inválida.' });
+app.get('/api/admin/withdrawals', requireAdmin, (req, res) => {
+  res.json({ withdrawals: db().withdrawals.slice().reverse().slice(0, 500) });
+});
+
+app.post('/api/admin/withdrawals/:id/:action', requireAdmin, (req, res) => {
+  const w = db().withdrawals.find((x) => x.id === Number(req.params.id));
+  if (!w) return res.status(404).json({ error: 'Saque não encontrado.' });
+  if (w.status !== 'pending') return res.status(400).json({ error: 'Este saque já foi finalizado.' });
+  if (!['paid', 'reject'].includes(req.params.action)) return res.status(400).json({ error: 'Ação inválida.' });
+  w.status = req.params.action === 'paid' ? 'paid' : 'rejected';
+  w.note = String(req.body?.note || '').slice(0, 200) || null;
+  w.closedAt = now();
   save();
-  res.json({ ok: true });
-});
-
-app.get('/api/admin/sends', requireAdmin, (req, res) => {
-  res.json({ sends: db().sends.slice(-500).reverse() });
-});
-
-app.get('/api/admin/schedules', requireAdmin, (req, res) => {
-  res.json({ schedules: db().schedules.slice().reverse().slice(0, 300).map(publicSchedule) });
-});
-
-app.get('/api/admin/remote-logs', requireAdmin, wrap(async (req, res) => {
-  const limit = Math.min(100, Math.max(1, toInt(req.query.limit) || 50));
-  const days = Math.min(30, Math.max(1, toInt(req.query.days) || 7));
-  res.json({ logs: await likeApi.logs(limit, days) });
-}));
-
-app.get('/api/admin/settings', requireAdmin, (req, res) => res.json({ settings: db().settings }));
-
-app.put('/api/admin/settings', requireAdmin, (req, res) => {
-  const s = db().settings;
-  for (const key of ['pixKey', 'pixHolder', 'contact', 'paymentNote']) {
-    if (req.body?.[key] !== undefined) s[key] = String(req.body[key]).slice(0, 400);
-  }
-  save();
-  res.json({ settings: s });
+  enqueue(db().users.find((u) => u.id === w.merchantId), `withdrawal.${w.status}`, w);
+  res.json({ withdrawal: w });
 });
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Rota não encontrada.' }));
 
-// ---------- Páginas ----------
-app.use('/vendor/three', express.static(path.join(root, 'node_modules/three'), { maxAge: '7d', index: false }));
-app.get('/app', (req, res) => {
-  if (!currentUser(req)) return res.redirect('/#acesso');
-  res.sendFile(path.join(root, 'public/app.html'));
-});
-app.use(express.static(path.join(root, 'public'), { index: 'index.html', extensions: ['html'] }));
+// ---------- páginas ----------
+const page = (f) => (req, res) => res.sendFile(path.join(root, 'public', f));
+app.get('/pay/:id', page('pay.html'));
+app.get('/app', page('app.html'));
+app.get(['/entrar', '/cadastro'], page('auth.html'));
+app.get('/docs', page('docs.html'));
+app.use(express.static(path.join(root, 'public'), { index: 'index.html' }));
 
-// ---------- Erros ----------
 app.use((err, req, res, next) => {
-  if (err instanceof ApiError) return res.status(err.status === 401 || err.status === 403 ? 502 : err.status).json({ error: err.message });
+  if (err instanceof ProviderError) return res.status(err.status).json({ error: err.message });
   if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'JSON inválido.' });
   console.error(err);
   res.status(500).json({ error: 'Erro interno. Tente novamente.' });
 });
 
 app.listen(config.port, () => {
-  console.log(`LikeSystem rodando em http://localhost:${config.port}`);
-  runSchedules();
-  if (config.mock) console.log('⚠  MOCK_API=1 — envios simulados, nenhum like real é enviado.');
-  else if (!config.apiKey) console.log('⚠  LIKESYSTEM_API_KEY não definida — envios ficarão indisponíveis.');
+  console.log(`Zyropay rodando em ${config.publicUrl}`);
+  if (config.mock) console.log('⚠  MOCK_PROVIDER=1 — provedor simulado, nenhum PIX real é gerado.');
+  else if (!config.mp.accessToken) console.log('⚠  MP_ACCESS_TOKEN não definido — não será possível gerar PIX.');
+  syncPending();
 });

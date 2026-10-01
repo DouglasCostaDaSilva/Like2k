@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>API · Zyropay</title>
+  <meta name="theme-color" content="#08080b" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/zyro.css" />
+  <style>
+    header.top { position: sticky; top: 0; z-index: 10; background: rgba(8, 8, 11, 0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+    header.top .in { width: min(1100px, 100% - 32px); margin: 0 auto; height: 60px; display: flex; align-items: center; justify-content: space-between; }
+    .layout { width: min(1100px, 100% - 32px); margin: 0 auto; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 40px; padding: 36px 0 80px; }
+    .toc { position: sticky; top: 90px; align-self: start; display: grid; gap: 2px; font-size: 14px; }
+    .toc a { padding: 6px 10px; border-radius: 8px; color: var(--text-2); }
+    .toc a:hover { background: var(--surface); color: var(--text); }
+    .toc span { padding: 14px 10px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #5b596b; }
+    article { min-width: 0; max-width: 760px; }
+    article h1 { font-size: 34px; }
+    article h2 { font-size: 22px; margin: 48px 0 12px; padding-top: 12px; scroll-margin-top: 80px; }
+    article h3 { font-size: 16px; font-family: var(--body); letter-spacing: 0; margin: 22px 0 8px; }
+    article p, article li { color: var(--text-2); font-size: 15px; }
+    article p { margin: 10px 0; }
+    article ul { padding-left: 20px; display: grid; gap: 6px; }
+    code { font-family: var(--mono); font-size: 0.88em; color: var(--accent-2); }
+    pre { margin: 14px 0; padding: 18px; border-radius: var(--radius-sm); background: #0b0b10; border: 1px solid var(--line); font-family: var(--mono); font-size: 13px; line-height: 1.65; color: #d9d6ea; overflow-x: auto; }
+    pre code { color: inherit; font-size: inherit; }
+    .ep { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--line); font-family: var(--mono); font-size: 14px; }
+    .m { padding: 3px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+    .m.post { background: var(--accent-soft); color: var(--accent-2); }
+    .m.get { background: var(--good-soft); color: var(--good); }
+    .tbl { width: 100%; overflow-x: auto; margin: 12px 0; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { font-size: 12px; color: var(--muted); background: var(--surface); }
+    tr:last-child td { border-bottom: 0; }
+    td:first-child { white-space: nowrap; }
+    td { color: var(--text-2); }
+    @media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } .toc { display: none; } }
+  </style>
+</head>
+<body>
+  <header class="top"><div class="in"><a href="/" class="brand" data-logo>Zyropay</a><div style="display:flex;gap:6px"><a class="btn btn-ghost" href="/app">Painel</a><a class="btn btn-primary" href="/cadastro">Criar conta</a></div></div></header>
+  <div class="layout">
+    <nav class="toc">
+      <span>Começo</span><a href="#intro">Visão geral</a><a href="#auth">Autenticação</a>
+      <span>Cobranças</span><a href="#criar">Criar cobrança</a><a href="#consultar">Consultar</a><a href="#listar">Listar</a><a href="#cancelar">Cancelar</a>
+      <span>Conta</span><a href="#saldo">Saldo</a>
+      <span>Avisos</span><a href="#webhooks">Webhooks</a><a href="#assinatura">Validar assinatura</a>
+      <span>Referência</span><a href="#status">Status</a><a href="#erros">Erros</a>
+    </nav>
+    <article>
+      <h1 id="intro">API do Zyropay</h1>
+      <p>Crie cobranças PIX, consulte pagamentos e receba avisos no seu sistema. A API usa JSON, valores <b>sempre em centavos</b> (R$ 149,90 = <code>14990</code>) e datas em ISO 8601.</p>
+      <p>Base URL: <code id="base">https://seu-dominio</code></p>
+      <p>Taxa: <b>2% por PIX pago, com mínimo de R$ 0,30</b>, já descontada em <code>net_amount</code>. Cobranças que expiram ou são canceladas não pagam taxa.</p>
+
+      <h2 id="auth">Autenticação</h2>
+      <p>Gere sua chave em <b>Painel › Integração</b> e envie em todas as requisições:</p>
+      <pre><code>Authorization: Bearer zp_live_xxxxxxxxxxxxxxxx</code></pre>
+      <p>Limite de 120 requisições por minuto por conta. Nunca exponha a chave no navegador ou em apps: chame a API pelo seu servidor.</p>
+
+      <h2 id="criar">Criar cobrança</h2>
+      <div class="ep"><span class="m post">POST</span>/v1/charges</div>
+      <div class="tbl"><table><thead><tr><th>Campo</th><th>Tipo</th><th>Descrição</th></tr></thead><tbody>
+        <tr><td><code>amount</code> *</td><td>inteiro</td><td>Valor em centavos, de 100 (R$ 1,00) a 5.000.000 (R$ 50.000,00).</td></tr>
+        <tr><td><code>description</code></td><td>texto</td><td>Aparece no checkout e no app do banco. Até 140 caracteres.</td></tr>
+        <tr><td><code>external_id</code></td><td>texto</td><td>Seu ID do pedido. Pode ser usado para consultar a cobrança.</td></tr>
+        <tr><td><code>expires_in</code></td><td>inteiro</td><td>Validade em segundos, de 300 a 86400. Padrão: 1800 (30 min).</td></tr>
+        <tr><td><code>payer</code></td><td>objeto</td><td><code>name</code>, <code>email</code> e <code>document</code> (CPF/CNPJ), todos opcionais.</td></tr>
+      </tbody></table></div>
+      <p>Mande o header <code>Idempotency-Key</code> com um valor único por pedido: se a mesma requisição chegar duas vezes, a API devolve a mesma cobrança em vez de criar outra.</p>
+<pre><code>curl -X POST <span data-base></span>/v1/charges \
+  -H "Authorization: Bearer zp_live_..." \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: pedido-4821" \
+  -d '{
+    "amount": 14990,
+    "description": "Pedido #4821",
+    "external_id": "4821",
+    "payer": { "name": "Maria Souza", "email": "maria@email.com" }
+  }'</code></pre>
+      <h3>Resposta <code>201</code></h3>
+<pre><code>{
+  "id": "ch_9f2c41e0a7b3d5e6f810",
+  "status": "pending",
+  "amount": 14990,
+  "fee": 300,
+  "net_amount": 14690,
+  "description": "Pedido #4821",
+  "external_id": "4821",
+  "payer": { "name": "Maria Souza", "email": "maria@email.com", "document": null },
+  "pix": {
+    "copy_paste": "00020126580014br.gov.bcb.pix...",
+    "qr_code_image": "data:image/png;base64,iVBORw0..."
+  },
+  "checkout_url": "<span data-base></span>/pay/ch_9f2c41e0a7b3d5e6f810",
+  "expires_at": "2026-10-01T15:30:00.000Z",
+  "paid_at": null,
+  "created_at": "2026-10-01T15:00:00.000Z"
+}</code></pre>
+      <p>Mostre o <code>pix.qr_code_image</code> e o <code>pix.copy_paste</code> no seu site, ou simplesmente redirecione o cliente para o <code>checkout_url</code>.</p>
+
+      <h2 id="consultar">Consultar cobrança</h2>
+      <div class="ep"><span class="m get">GET</span>/v1/charges/{id ou external_id}</div>
+      <p>Retorna a cobrança no mesmo formato acima, com o status atualizado.</p>
+
+      <h2 id="listar">Listar cobranças</h2>
+      <div class="ep"><span class="m get">GET</span>/v1/charges?limit=20&amp;status=paid</div>
+      <p><code>limit</code> de 1 a 100 (padrão 20). <code>status</code> opcional. Resposta: <code>{ "data": [ ...cobranças ] }</code>, das mais novas para as mais antigas.</p>
+
+      <h2 id="cancelar">Cancelar cobrança</h2>
+      <div class="ep"><span class="m post">POST</span>/v1/charges/{id}/cancel</div>
+      <p>Só funciona para cobranças <code>pending</code>. O QR Code para de aceitar pagamentos.</p>
+
+      <h2 id="saldo">Saldo</h2>
+      <div class="ep"><span class="m get">GET</span>/v1/balance</div>
+<pre><code>{
+  "available": 98420,          // pode sacar agora
+  "pending_withdrawals": 5000, // saques em análise
+  "total_received": 1250000,
+  "total_fees": 25000,
+  "total_withdrawn": 1121580,
+  "currency": "BRL"
+}</code></pre>
+
+      <h2 id="webhooks">Webhooks</h2>
+      <p>Cadastre a URL em <b>Painel › Integração</b>. Enviamos um <code>POST</code> em JSON a cada evento:</p>
+      <ul>
+        <li><code>charge.created</code>, <code>charge.paid</code>, <code>charge.expired</code>, <code>charge.canceled</code>, <code>charge.refunded</code>: <code>data</code> é a cobrança.</li>
+        <li><code>withdrawal.requested</code>, <code>withdrawal.paid</code>, <code>withdrawal.rejected</code>: <code>data</code> é o saque.</li>
+      </ul>
+<pre><code>{
+  "id": "evt_3b1f8c2a9d",
+  "type": "charge.paid",
+  "created_at": "2026-10-01T15:02:11.000Z",
+  "data": { "id": "ch_9f2c41e0a7b3d5e6f810", "status": "paid", "amount": 14990, ... }
+}</code></pre>
+      <p>Responda com qualquer status <code>2xx</code> em até 10 segundos. Se não responder, reenviamos depois de 10 s, 1 min, 5 min, 30 min e 2 h. O mesmo evento pode chegar mais de uma vez: use o <code>id</code> do evento para ignorar repetidos.</p>
+      <p>Libere o pedido apenas no <code>charge.paid</code>. Se quiser, confirme consultando <code>GET /v1/charges/{id}</code>.</p>
+
+      <h2 id="assinatura">Validar a assinatura</h2>
+      <p>Todo aviso tem o header <code>Zyropay-Signature: t=1727794931,v1=5f2a…</code>. Calcule o HMAC-SHA256 de <code>"{t}.{corpo bruto}"</code> com o segredo do webhook e compare com <code>v1</code>. Recuse avisos com <code>t</code> mais antigo que 5 minutos.</p>
+<pre><code>// Node.js
+import crypto from 'node:crypto';
+
+function avisoValido(rawBody, header, segredo) {
+  const { t, v1 } = Object.fromEntries(header.split(',').map((p) => p.split('=')));
+  if (Math.abs(Date.now() / 1000 - Number(t)) > 300) return false;
+  const esperado = crypto.createHmac('sha256', segredo).update(`${t}.${rawBody}`).digest('hex');
+  return crypto.timingSafeEqual(Buffer.from(esperado), Buffer.from(v1));
+}</code></pre>
+<pre><code># PHP
+[$t, $v1] = array_map(fn($p) => explode('=', $p)[1], explode(',', $_SERVER['HTTP_ZYROPAY_SIGNATURE']));
+$esperado = hash_hmac('sha256', $t . '.' . file_get_contents('php://input'), $segredo);
+$valido = hash_equals($esperado, $v1) && abs(time() - (int)$t) <= 300;</code></pre>
+
+      <h2 id="status">Status da cobrança</h2>
+      <div class="tbl"><table><thead><tr><th>Status</th><th>Significado</th></tr></thead><tbody>
+        <tr><td><code>pending</code></td><td>Aguardando o pagamento.</td></tr>
+        <tr><td><code>paid</code></td><td>Pago. O valor líquido já está no seu saldo.</td></tr>
+        <tr><td><code>expired</code></td><td>O prazo acabou sem pagamento.</td></tr>
+        <tr><td><code>canceled</code></td><td>Cancelada por você antes do pagamento.</td></tr>
+        <tr><td><code>refunded</code></td><td>Pagamento devolvido ao pagador.</td></tr>
+        <tr><td><code>failed</code></td><td>O provedor recusou a transação.</td></tr>
+      </tbody></table></div>
+
+      <h2 id="erros">Erros</h2>
+      <p>Todo erro responde <code>{ "error": "mensagem em português" }</code>.</p>
+      <div class="tbl"><table><thead><tr><th>HTTP</th><th>Quando</th></tr></thead><tbody>
+        <tr><td>400</td><td>Parâmetro inválido (valor fora do limite, CPF inválido, etc.).</td></tr>
+        <tr><td>401</td><td>Chave ausente ou inválida.</td></tr>
+        <tr><td>403</td><td>Conta bloqueada.</td></tr>
+        <tr><td>404</td><td>Cobrança não encontrada.</td></tr>
+        <tr><td>429</td><td>Mais de 120 requisições por minuto.</td></tr>
+        <tr><td>502</td><td>O provedor PIX não respondeu. Tente de novo (com a mesma <code>Idempotency-Key</code>).</td></tr>
+      </tbody></table></div>
+    </article>
+  </div>
+  <script type="module">
+    import { LOGO } from '/js/common.js';
+    document.querySelectorAll('[data-logo]').forEach((el) => { el.innerHTML = `${LOGO}Zyropay`; });
+    document.getElementById('base').textContent = location.origin;
+    document.querySelectorAll('[data-base]').forEach((el) => { el.textContent = location.origin; });
+  </script>
+</body>
+</html>

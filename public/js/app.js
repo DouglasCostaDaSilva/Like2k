@@ -1,696 +1,527 @@
-import { api, int, brl, dt, esc } from './common.js';
+import { $, $$, api, brl, int, esc, dt, toCents, moneyMask, status, toast, alertBox, copy, busy, LOGO } from '/js/common.js';
 
-const $ = (sel, root = document) => root.querySelector(sel);
-const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
-
-let scene = null;
-import('./scene.js')
-  .then(({ createScene }) => { scene = createScene($('#stage'), { mode: 'app' }); applyPose(current); })
-  .catch((err) => console.warn('3D indisponível:', err));
-
-const state = { me: null, rules: null, global: null, stats: null, settings: null, player: null };
+const state = { me: null, mock: false, limits: null };
 let current = null;
-
-// ------------------------------------------------------------------ ícones e menu
-const icon = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
-const ICONS = {
-  dashboard: icon('<rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/>'),
-  send: icon('<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/>'),
-  buy: icon('<path d="M3 7h18l-2 12H5L3 7z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/>'),
-  history: icon('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/>'),
-  clients: icon('<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M17 3.5a4 4 0 0 1 0 8"/><path d="M22 21a7 7 0 0 0-4-6.3"/>'),
-  requests: icon('<circle cx="10" cy="8" r="4"/><path d="M3 21a7 7 0 0 1 11-5.7"/><path d="M19 15v6M16 18h6"/>'),
-  orders: icon('<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>'),
-  sends: icon('<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>'),
-  settings: icon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
-};
-ICONS.overview = ICONS.dashboard;
-ICONS.auto = icon('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9 2h6M12 2v3"/>');
-ICONS.api = icon('<path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/>');
-
-const MENUS = {
-  client: [['dashboard', 'Painel'], ['send', 'Enviar likes'], ['auto', 'Auto Likes'], ['history', 'Histórico'], ['buy', 'Comprar estoque'], ['api', 'API']],
-  admin: [['overview', 'Visão geral'], ['send', 'Enviar likes'], ['clients', 'Clientes'], ['requests', 'Solicitações'], ['orders', 'Pedidos'], ['sends', 'Envios'], ['settings', 'Configurações']],
-};
-
-// Ângulo do traje 3D para cada tela — ele gira ao trocar de tela.
-const VIEW_ANGLE = { auto: -1.0, api: 2.6, dashboard: -0.45, overview: -0.45, send: 0.55, buy: Math.PI + 0.3, history: 1.4, clients: -1.2, requests: 2.2, orders: Math.PI - 0.4, sends: 0.9, settings: -2.4 };
-let rotY = -0.45;
-
-function applyPose(view) {
-  if (!scene || !view) return;
-  let target = VIEW_ANGLE[view] ?? 0;
-  while (target < rotY + 0.4) target += Math.PI * 2; // sempre gira para frente
-  if (target - rotY > Math.PI * 2 + 0.4) target -= Math.PI * 2;
-  rotY = target;
-  const narrow = innerWidth < 860;
-  scene.setPose(narrow
-    ? { x: 0, y: 1.1, rotY, rotX: 0.05, scale: 0.62, camY: 0.2 }
-    : { x: 3.2, y: -0.1, rotY, rotX: 0.04, scale: 0.95, camY: 0.2 });
-}
-
-function renderMenu() {
-  const items = MENUS[state.me.role];
-  $('#menu').innerHTML = items.map(([id, label]) =>
-    `<button data-go="${id}">${ICONS[id]}<span>${label}</span><span class="badge hidden" data-badge="${id}"></span></button>`).join('');
-}
-
-function setBadge(id, n) {
-  const b = $(`[data-badge="${id}"]`);
-  if (!b) return;
-  b.textContent = n;
-  b.classList.toggle('hidden', !n);
-}
-
 const LOADERS = {};
+
+// ------------------------------------------------------------------ navegação
+const icon = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const I = {
+  home: icon('<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>'),
+  charges: icon('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 14h3v3M21 14v.01M14 21h7v-4"/>'),
+  withdrawals: icon('<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 21h16"/>'),
+  integration: icon('<path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/>'),
+  account: icon('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'),
+  merchants: icon('<path d="M3 9h18l-1.5-5h-15z"/><path d="M5 9v11h14V9M9 20v-6h6v6"/>'),
+};
+const MENUS = {
+  merchant: [['home', 'Início', I.home], ['charges', 'Cobranças', I.charges], ['withdrawals', 'Saques', I.withdrawals], ['integration', 'Integração', I.integration], ['account', 'Conta', I.account]],
+  admin: [['admin-home', 'Visão geral', I.home], ['admin-merchants', 'Lojistas', I.merchants], ['admin-charges', 'Cobranças', I.charges], ['admin-withdrawals', 'Saques', I.withdrawals]],
+};
+
+function renderNav() {
+  $('#nav').innerHTML = MENUS[state.me.role].map(([id, label, ic]) => `<button data-go="${id}">${ic}<span>${label}</span><span class="badge hidden" data-badge="${id}"></span></button>`).join('');
+}
+function setBadge(id, n) { const b = $(`[data-badge="${id}"]`); if (b) { b.textContent = n; b.classList.toggle('hidden', !n); } }
 
 function go(view) {
   const allowed = MENUS[state.me.role].map(([id]) => id);
   if (!allowed.includes(view)) view = allowed[0];
   current = view;
   $$('.view').forEach((v) => v.classList.toggle('on', v.dataset.view === view));
-  $$('#menu button').forEach((b) => b.classList.toggle('on', b.dataset.go === view));
-  $('#side').classList.remove('open');
+  $$('#nav button').forEach((b) => b.classList.toggle('on', b.dataset.go === view));
+  $('#sidebar').classList.remove('open');
   if (location.hash !== `#${view}`) history.replaceState(null, '', `#${view}`);
-  applyPose(view);
-  scrollTo({ top: 0, behavior: 'smooth' });
-  LOADERS[view]?.();
+  scrollTo(0, 0);
+  LOADERS[view]?.().catch((err) => toast(err.message, 'error'));
 }
 
 document.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-go]');
-  if (t) { e.preventDefault(); go(t.dataset.go); }
+  const g = e.target.closest('[data-go]');
+  if (g) { e.preventDefault(); go(g.dataset.go); return; }
+  if (e.target.closest('[data-new-charge]')) { newCharge(); return; }
+  const side = $('#sidebar');
+  if (side.classList.contains('open') && !side.contains(e.target) && !e.target.closest('#menuBtn')) side.classList.remove('open');
 });
-$('#menuToggle').addEventListener('click', () => $('#side').classList.toggle('open'));
-document.addEventListener('click', (e) => { // toque fora fecha o menu no celular
-  const side = $('#side');
-  if (side.classList.contains('open') && !side.contains(e.target) && !e.target.closest('#menuToggle')) side.classList.remove('open');
-});
-$('#logout').addEventListener('click', async () => { await api('/api/auth/logout', { method: 'POST' }).catch(() => {}); location.href = '/'; });
-addEventListener('resize', () => applyPose(current));
+$('#menuBtn').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+$('#logout').addEventListener('click', async () => { await api('/api/auth/logout', { method: 'POST' }).catch(() => {}); location.href = '/entrar'; });
+addEventListener('hashchange', () => { const v = location.hash.slice(1); if (v && v !== current) go(v); });
 
-// ------------------------------------------------------------------ utilidades de UI
-function toast(msg, kind = 'ok') {
-  const el = document.createElement('div');
-  el.className = `toast ${kind}`;
-  el.textContent = msg;
-  $('#toasts').append(el);
-  setTimeout(() => el.remove(), 4800);
-}
-
-function alertBox(el, msg, kind = 'error') {
-  if (!msg) { el.className = 'alert'; return; }
-  el.textContent = msg;
-  el.className = `alert ${kind} show`;
-}
-
-const pill = (status) => {
-  const label = { success: 'Enviado', error: 'Erro', pending: 'Pendente', unknown: 'Verificar', active: 'Ativo', blocked: 'Bloqueado', paid: 'Pago', rejected: 'Recusado', canceled: 'Cancelado' }[status] || status;
-  return `<span class="pill ${esc(status)}">${esc(label)}</span>`;
-};
-
-function table(head, rows, empty = 'Nada por aqui ainda.') {
-  if (!rows.length) return `<div class="empty">${empty}</div>`;
-  return `<table><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`;
-}
-
-function modal({ title, text = '', body = '', okText = 'Confirmar', danger = false, onOk }) {
-  const m = $('#modal');
+// ------------------------------------------------------------------ modal
+function openModal({ title, body, foot = '' }) {
   $('#mTitle').textContent = title;
-  $('#mText').textContent = text;
-  $('#mBody').innerHTML = `${body}<div class="alert" id="mMsg" style="margin-top:12px"></div>`;
-  const ok = $('#mOk');
-  ok.textContent = okText;
-  ok.className = `btn btn-sm ${danger ? 'btn-danger' : 'btn-primary'}`;
-  m.classList.add('show');
-  const close = () => { m.classList.remove('show'); ok.onclick = null; };
-  $('#mCancel').onclick = close;
-  m.onclick = (e) => { if (e.target === m) close(); };
-  ok.onclick = async () => {
-    ok.disabled = true;
-    try { await onOk?.($('#mBody')); close(); } catch (err) { alertBox($('#mMsg'), err.message); } finally { ok.disabled = false; }
-  };
-  setTimeout(() => $('#mBody input')?.focus(), 50);
+  $('#mBody').innerHTML = body;
+  $('#mFoot').innerHTML = foot;
+  $('#mFoot').classList.toggle('hidden', !foot);
+  $('#modal').classList.add('show');
+  setTimeout(() => $('#mBody input:not([disabled])')?.focus(), 50);
 }
+const closeModal = () => { $('#modal').classList.remove('show'); clearInterval(modalPoll); };
+$('#mClose').addEventListener('click', closeModal);
+$('#modal').addEventListener('mousedown', (e) => { if (e.target.id === 'modal') closeModal(); });
+addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+let modalPoll = null;
 
-function busy(btn, on, label) {
-  if (on) { btn.dataset.label = btn.innerHTML; btn.innerHTML = `<i class="spinner"></i>${label || ''}`; btn.disabled = true; }
-  else { btn.innerHTML = btn.dataset.label || btn.innerHTML; btn.disabled = false; }
-}
-
-// ------------------------------------------------------------------ dados base
-async function loadMe() {
-  const r = await api('/api/me');
-  Object.assign(state, { me: r.user, rules: r.rules, global: r.global, stats: r.stats, settings: r.settings, apiKey: r.apiKey });
-  $('#mockBanner').classList.toggle('hidden', !r.mock);
-  $('#meName').textContent = r.user.username;
-  $('#meRole').textContent = r.user.role === 'admin' ? 'Administrador' : 'Cliente';
-  $('#avatar').textContent = r.user.username[0].toUpperCase();
-  $('#helloName').textContent = r.user.username;
-  return r;
-}
-
-function renderStockKpis() {
-  const { me, global, stats } = state;
-  const limit = me.usedTotal + me.stock;
-  const pct = limit ? Math.round((me.usedTotal / limit) * 100) : 0;
-  $('#kLimit').textContent = int(limit);
-  $('#kUsed').textContent = int(me.usedTotal);
-  $('#kCount').textContent = `${int(stats.sendsCount)} envios no total`;
-  $('#kStock').textContent = int(me.stock);
-  $('#kExpiry').textContent = me.expiresAt ? new Date(`${me.expiresAt}T12:00:00`).toLocaleDateString('pt-BR') : '∞';
-  $('#kExpiryHint').textContent = me.expired ? 'acesso expirado: renove seu plano' : me.expiresAt ? 'validade do seu acesso' : 'sem data de expiração';
-  $('#kStatus').textContent = me.expired ? 'Expirado' : 'Ativo';
-  $('#kStatus').className = `pill ${me.expired ? 'blocked' : 'active'}`;
-  $('#kProgress').style.width = `${pct}%`;
-  $('#kProgressPct').textContent = `${pct}%`;
-  $('#kProgressText').textContent = `${int(me.usedTotal)} de ${int(limit)} likes usados`;
-  $('#kGlobal').textContent = global.remaining == null ? 'indisponível' : int(global.remaining);
-  $('#kToday').textContent = int(stats.sentToday);
-  $('#kAuto').textContent = int(stats.activeSchedules || 0);
-  const low = me.role === 'client' && me.stock < 5000;
-  $('#lowStock').classList.toggle('hidden', !low);
-  if (low) $('#lowStock').innerHTML = `<span>⚠</span><span><b>Estoque abaixo de 5.000 likes</b>: restam ${int(me.stock)}. <a href="#buy" data-go="buy" class="grad">Renove seu estoque →</a></span>`;
-}
-
-const SOURCE_LABEL = { manual: 'Manual', auto: 'Agendado', api: 'API' };
-const tag = (src) => `<span class="tag ${esc(src || 'manual')}">${SOURCE_LABEL[src || 'manual']}</span>`;
-const sendRow = (s, withUser = false) => `<tr>
-  <td>${dt(s.createdAt)}</td>
-  ${withUser ? `<td>${esc(s.username)}</td>` : ''}
-  <td>${tag(s.source)}</td>
-  <td class="mono">${esc(s.targetId)}</td>
-  <td>${esc(s.nickname || '—')}</td>
-  <td class="num">${int(s.status === 'success' ? s.likesSent : s.amount)}</td>
-  <td>${pill(s.status)}${s.error ? `<span class="err-text" title="${esc(s.error)}">${esc(s.error)}</span>` : ''}</td>
-</tr>`;
-const SEND_HEAD = ['Data', 'Origem', 'ID', 'Nick', 'Likes', 'Status'];
-
-// cartão de envio (histórico no estilo lista, bom no celular)
-const sendItem = (s) => {
-  const ok = s.status === 'success';
-  return `<div class="item ${ok ? '' : s.status === 'error' ? 'err' : ''}">
-    <div class="who">${tag(s.source)}${s.nickname ? `<strong>${esc(s.nickname)}</strong><span class="uid mono">(${esc(s.targetId)})</span>` : `<strong class="mono">${esc(s.targetId)}</strong>`}</div>
-    <div class="qty">${int(ok ? s.likesSent : 0)}</div>
-    <div class="meta">${dt(s.createdAt)}</div>
-    <div class="state">${ok ? '<span class="pill success">Enviado</span>' : `${pill(s.status)}${s.error ? `<span class="err-text" title="${esc(s.error)}">${esc(s.error)}</span>` : ''}`}</div>
-  </div>`;
-};
-
-// ------------------------------------------------------------------ cliente: painel
-LOADERS.dashboard = async () => {
-  await loadMe();
-  renderStockKpis();
-  const { sends } = await api('/api/sends');
-  $('#recentSends').innerHTML = sends.length ? sends.slice(0, 8).map(sendItem).join('') : '<div class="empty">Você ainda não fez envios. <a href="#send" data-go="send" class="grad">Enviar agora →</a></div>';
-};
-
-let hSource = '';
-LOADERS.history = async () => {
-  const { sends } = await api(`/api/sends?days=${$('#hDays').value}${hSource ? `&source=${hSource}` : ''}`);
-  $('#hCount').textContent = `${int(sends.length)} ${sends.length === 1 ? 'envio encontrado' : 'envios encontrados'}`;
-  $('#hList').innerHTML = sends.length ? sends.map(sendItem).join('') : '<div class="empty">Nenhum envio neste filtro.</div>';
-};
-$('#hSource').addEventListener('click', (e) => {
-  const c = e.target.closest('[data-src]');
-  if (!c) return;
-  hSource = c.dataset.src;
-  $$('#hSource .chip').forEach((x) => x.classList.toggle('on', x === c));
-  LOADERS.history();
-});
-$('#hDays').addEventListener('change', () => LOADERS.history());
-
-// ------------------------------------------------------------------ Auto Likes
-const pad2 = (n) => String(n).padStart(2, '0');
-function renderAutoSummary() {
-  const qty = Number($('#aQty').value) || 0, days = Number($('#aDays').value) || 0;
-  $('#aSummary').innerHTML = `
-    <div><span class="muted">Envio diário</span><b>${int(qty)} likes às ${pad2(Number($('#aHour').value) || 0)}:${pad2(Number($('#aMin').value) || 0)}</b></div>
-    <div><span class="muted">Duração</span><b>${int(days)} ${days === 1 ? 'dia' : 'dias'}</b></div>
-    <div class="total"><span>Total do período</span><b class="grad">${int(qty * days)} likes</b></div>
-    ${state.me.role === 'client' ? `<div><span class="muted">Seu estoque</span><b>${int(state.me.stock)}</b></div>` : ''}`;
-}
-['#aQty', '#aDays', '#aHour', '#aMin'].forEach((id) => $(id).addEventListener('input', renderAutoSummary));
-$('#aId').addEventListener('input', (e) => { e.target.value = e.target.value.replace(/\D/g, ''); });
-
-const SCHED_STATUS = { active: ['active', 'Ativo'], done: ['paid', 'Concluído'], canceled: ['canceled', 'Cancelado'] };
-async function loadSchedules() {
-  const { schedules } = await api('/api/schedules');
-  $('#aList').innerHTML = schedules.length ? schedules.map((x) => {
-    const [cls, label] = SCHED_STATUS[x.status] || ['pending', x.status];
-    const last = x.lastRun ? `Último: ${dt(x.lastRun.at)} · ${x.lastRun.ok ? `${int(x.lastRun.sent)} likes` : esc(x.lastRun.error || 'erro')}` : 'Ainda não executado';
-    return `<div class="item ${x.lastRun && !x.lastRun.ok ? 'err' : ''}">
-      <div class="who"><span class="pill ${cls}">${label}</span><strong class="mono">${esc(x.targetId)}</strong></div>
-      <div class="qty">${int(x.perDay)}/dia</div>
-      <div class="meta">${pad2(x.hour)}:${pad2(x.minute)} · dia ${Math.min(x.runsDone, x.days)} de ${x.days} · ${int(x.likesSent)} enviados${x.nextRunAt ? ` · próximo ${dt(x.nextRunAt)}` : ''}<br>${last}</div>
-      <div class="state">${x.status === 'active' ? `<button class="btn btn-xs btn-danger" data-sched-cancel="${x.id}">Cancelar</button>` : ''}</div>
-    </div>`;
-  }).join('') : '<div class="empty">Nenhum agendamento configurado.</div>';
-}
-$('#aList').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-sched-cancel]');
-  if (!b) return;
-  modal({ title: 'Cancelar Auto Likes', text: 'Os envios diários deste ID param agora. Envios já feitos continuam no histórico.', okText: 'Cancelar agendamento', danger: true,
-    onOk: async () => { await api(`/api/schedules/${b.dataset.schedCancel}/cancel`, { method: 'POST' }); toast('Agendamento cancelado.'); loadSchedules(); } });
-});
-$('#autoForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const btn = e.submitter || $('#autoForm button[type=submit]');
-  busy(btn, true, ' Criando…');
-  try {
-    await api('/api/schedules', { method: 'POST', body: { target_id: $('#aId').value, per_day: Number($('#aQty').value), days: Number($('#aDays').value), hour: Number($('#aHour').value), minute: Number($('#aMin').value) } });
-    alertBox($('#aMsg'), 'Agendamento criado! O primeiro envio sai no próximo horário marcado.', 'ok');
-    scene?.spin();
-    loadSchedules();
-  } catch (err) { alertBox($('#aMsg'), err.message); } finally { busy(btn, false); }
-});
-LOADERS.auto = async () => { await loadMe(); renderAutoSummary(); loadSchedules(); };
-
-// ------------------------------------------------------------------ API
-let keyVisible = false;
-function renderApi() {
-  const key = state.apiKey;
-  const shown = key ? (keyVisible ? key : `${key.slice(0, 7)}${'•'.repeat(24)}${key.slice(-4)}`) : 'Nenhuma chave gerada ainda';
-  $('#kApiKey').textContent = shown;
-  $('#kShow').textContent = keyVisible ? 'Ocultar' : 'Mostrar';
-  $('#kCopy').disabled = $('#kShow').disabled = !key;
-  $('#kNew').textContent = key ? 'Gerar nova chave' : 'Gerar chave';
-  const base = location.origin && location.origin !== 'null' ? location.origin : 'https://seu-dominio';
-  $('#kBase').textContent = base;
-  $('#kExample').textContent = `curl -X POST ${base}/api/v1/likes/send \\
-     -H "X-Api-Key: SUA_API_KEY_AQUI" \\
-     -H "Content-Type: application/json" \\
-     -d '{"target_id": "123456789", "amount": 2000}'
-
-# resposta
-{ "likes_sent": 2000, "remaining": 8000, "player_nickname": "NomeJogador", "log_id": 142 }`;
-}
-$('#kShow').addEventListener('click', () => { keyVisible = !keyVisible; renderApi(); });
-$('#kCopy').addEventListener('click', () => {
-  navigator.clipboard?.writeText(state.apiKey).then(() => toast('API Key copiada.')).catch(() => { keyVisible = true; renderApi(); toast('Selecione e copie a chave.', 'error'); });
-});
-$('#kNew').addEventListener('click', () => {
-  const run = async () => { const r = await api('/api/me/apikey', { method: 'POST' }); state.apiKey = r.apiKey; keyVisible = true; renderApi(); toast('Nova API Key gerada.'); };
-  if (!state.apiKey) { run().catch((err) => toast(err.message, 'error')); return; }
-  modal({ title: 'Gerar nova API Key', text: 'A chave atual para de funcionar na hora. Atualize suas integrações com a nova.', okText: 'Gerar nova', danger: true, onOk: run });
-});
-LOADERS.api = async () => { await loadMe(); renderApi(); };
-
-// ------------------------------------------------------------------ enviar likes
-const sId = $('#sId'), sAmount = $('#sAmount'), sRange = $('#sRange');
-
-function sendMax() {
-  const r = state.rules;
-  let max = r.maxPerSend;
-  if (state.me.role === 'client') max = Math.min(max, state.me.stock);
-  if (state.player && state.player.uid === sId.value) max = Math.min(max, state.player.dailyLimit - state.player.usedToday);
-  return Math.max(0, max);
-}
-
-function renderSend() {
-  const max = sendMax();
-  if (Number(sAmount.value) > max) sAmount.value = max;
-  const amount = Math.max(0, Math.min(Number(sAmount.value) || 0, max));
-  sRange.max = Math.max(1, max);
-  sAmount.max = Math.max(1, max);
-  sRange.value = amount;
-  sRange.style.setProperty('--p', `${max ? (amount / max) * 100 : 0}%`);
-  $('#sChips').innerHTML = [100, 500, 1000, 2000].map((n) => `<button type="button" class="chip ${amount === Math.min(n, max) ? 'on' : ''}" data-n="${n}" ${n > max && n !== 2000 ? 'disabled' : ''}>${n === 2000 ? 'Máximo' : int(n)}</button>`).join('');
-  const isClient = state.me.role === 'client';
-  const p = state.player && state.player.uid === sId.value ? state.player : null;
-  $('#sSummary').innerHTML = `
-    <div><span class="muted">ID</span><b class="mono">${esc(sId.value || '—')}</b></div>
-    <div><span class="muted">Limite diário deste ID</span><b>${p ? `${int(p.dailyLimit - p.usedToday)} de ${int(p.dailyLimit)} restantes` : `${int(state.rules.dailyLimitPerUid)}/dia`}</b></div>
-    ${isClient
-      ? `<div><span class="muted">Seu estoque</span><b>${int(state.me.stock)}</b></div>
-         <div class="total"><span>Estoque após o envio</span><b class="grad">${int(state.me.stock - amount)}</b></div>`
-      : `<div class="total"><span>Envio administrativo</span><b class="grad">${int(amount)} likes</b></div>`}`;
-  $('#sBtn').disabled = !amount || !/^\d{5,15}$/.test(sId.value);
-  $('#sBtn').textContent = amount ? `Enviar ${int(amount)} likes` : isClient && state.me.stock === 0 ? 'Sem estoque — compre mais' : 'Enviar likes';
-}
-
-sId.addEventListener('input', () => { sId.value = sId.value.replace(/\D/g, ''); $('#sPlayer').classList.remove('show'); renderSend(); });
-sAmount.addEventListener('input', renderSend);
-sRange.addEventListener('input', () => { sAmount.value = sRange.value; renderSend(); });
-$('#sChips').addEventListener('click', (e) => {
-  const c = e.target.closest('[data-n]');
-  if (c) { sAmount.value = Math.min(Number(c.dataset.n), sendMax()); renderSend(); }
-});
-
-function renderPlayer() {
-  const p = state.player;
-  const left = p.dailyLimit - p.usedToday;
-  const box = $('#sPlayer');
-  box.innerHTML = `<div class="pic">${esc((p.nickname || '?')[0]).toUpperCase()}</div>
-    <div><strong>${esc(p.nickname || 'Jogador')}</strong><span>${esc(p.region || '—')}${p.level ? ` · nível ${p.level}` : ''}${p.liked != null ? ` · ${int(p.liked)} likes no perfil` : ''}</span></div>
-    <div class="left"><strong class="${left ? '' : 'err-text'}">${int(left)}</strong><span>restantes hoje</span></div>`;
-  box.classList.add('show');
-}
-
-async function checkPlayer() {
-  const uid = sId.value;
-  if (!/^\d{5,15}$/.test(uid)) { alertBox($('#sMsg'), 'Digite um ID válido (somente números).'); return null; }
-  const btn = $('#sCheck');
-  busy(btn, true);
-  alertBox($('#sMsg'));
-  try {
-    state.player = await api(`/api/player/${uid}`);
-    renderPlayer();
-    scene?.pulse();
-    renderSend();
-    return state.player;
-  } catch (err) {
-    alertBox($('#sMsg'), err.message);
-    return null;
-  } finally {
-    busy(btn, false);
-  }
-}
-$('#sCheck').addEventListener('click', checkPlayer);
-sId.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); checkPlayer(); } });
-
-$('#sendForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const uid = sId.value;
-  const amount = Number(sAmount.value);
-  if (!state.player || state.player.uid !== uid) { if (!(await checkPlayer())) return; }
-  if (amount < 1 || amount > sendMax()) { alertBox($('#sMsg'), `Quantidade permitida: 1 a ${int(sendMax())}.`); return; }
-  const nick = state.player?.nickname;
-  modal({
-    title: 'Confirmar envio',
-    text: `Enviar ${int(amount)} likes para ${nick ? `${nick} ` : ''}(ID ${uid})?`,
-    okText: 'Enviar agora',
-    onOk: async () => {
-      const btn = $('#sBtn');
-      busy(btn, true, ' Enviando…');
-      try {
-        const r = await api('/api/send', { method: 'POST', body: { target_id: uid, amount } });
-        state.me.stock = r.stock;
-        if (state.player?.uid === uid) { state.player.usedToday = r.usedToday; renderPlayer(); }
-        alertBox($('#sMsg'), `✔ ${int(r.send.likesSent)} likes enviados para ${r.send.nickname || uid}.`, 'ok');
-        toast(`${int(r.send.likesSent)} likes enviados!`);
-        scene?.spin();
-      } catch (err) {
-        if (err.data?.stock != null) state.me.stock = err.data.stock;
-        alertBox($('#sMsg'), err.message);
-        toast(err.message, 'error');
-      } finally {
-        busy(btn, false);
-        renderSend();
-        loadSendRecent();
-      }
-    },
-  });
-});
-
-async function loadSendRecent() {
-  if (state.me.role === 'admin') {
-    const { sends } = await api('/api/admin/sends');
-    $('#sRecent').innerHTML = table(['Data', 'Usuário', ...SEND_HEAD.slice(1)], sends.slice(0, 10).map((s) => sendRow(s, true)));
-  } else {
-    const { sends } = await api('/api/sends');
-    $('#sRecent').innerHTML = sends.length ? `<div class="list">${sends.slice(0, 10).map(sendItem).join('')}</div>` : '<div class="empty">Nenhum envio ainda.</div>';
-  }
-}
-
-LOADERS.send = async () => {
-  await loadMe();
-  renderSend();
-  loadSendRecent();
-  setTimeout(() => sId.focus(), 300);
-};
-
-// ------------------------------------------------------------------ comprar estoque
-const bLikes = $('#bLikes'), bRange = $('#bRange');
-
-function renderBuy() {
-  const r = state.rules;
-  const likes = Number(bLikes.value) || 0;
-  const valid = likes >= r.minPurchase && likes % r.packSize === 0 && likes <= r.maxPurchase;
-  const packs = Math.floor(likes / r.packSize);
-  bRange.value = Math.min(likes, Number(bRange.max));
-  bRange.style.setProperty('--p', `${((bRange.value - bRange.min) / (bRange.max - bRange.min)) * 100}%`);
-  $('#bChips').innerHTML = [20000, 50000, 100000, 200000].map((n) => `<button type="button" class="chip ${likes === n ? 'on' : ''}" data-n="${n}">${int(n / 1000)}K</button>`).join('');
-  $('#bSummary').innerHTML = `
-    <div><span class="muted">Pacotes de 2.000</span><b>${int(packs)}</b></div>
-    <div><span class="muted">Preço por pacote</span><b>${brl(r.pricePerPackCents)}</b></div>
-    <div><span class="muted">Estoque após a aprovação</span><b>${int(state.me.stock + (valid ? likes : 0))}</b></div>
-    <div class="total"><span>Total</span><b class="grad">${valid ? brl(packs * r.pricePerPackCents) : '—'}</b></div>`;
-  alertBox($('#bMsg'), valid || !likes ? '' : likes < r.minPurchase ? `O mínimo é ${int(r.minPurchase)} likes.` : likes % r.packSize ? 'Use múltiplos de 2.000 likes.' : `Máximo de ${int(r.maxPurchase)} likes por pedido.`);
-}
-bLikes.addEventListener('input', renderBuy);
-bLikes.addEventListener('change', () => {
-  const r = state.rules;
-  bLikes.value = Math.max(r.minPurchase, Math.round((Number(bLikes.value) || 0) / r.packSize) * r.packSize);
-  renderBuy();
-});
-bRange.addEventListener('input', () => { bLikes.value = bRange.value; renderBuy(); });
-$('#bChips').addEventListener('click', (e) => { const c = e.target.closest('[data-n]'); if (c) { bLikes.value = c.dataset.n; renderBuy(); } });
-
-function pixBox(order) {
-  const s = state.settings;
-  return `<strong>Pedido #${order.id} · ${int(order.likes)} likes · ${brl(order.priceCents)}</strong>
-    ${s.pixKey ? `<div><span class="muted">Chave PIX${s.pixHolder ? ` — ${esc(s.pixHolder)}` : ''}</span><code>${esc(s.pixKey)}</code></div>` : '<span class="muted">O administrador enviará os dados de pagamento.</span>'}
-    ${s.pixKey ? '<button type="button" class="btn btn-sm" data-copy>Copiar chave PIX</button>' : ''}
-    <span class="muted" style="font-size:13px">${esc(s.paymentNote)}${s.contact ? ` Contato: ${esc(s.contact)}` : ''}</span>`;
-}
-$('#bPix').addEventListener('click', (e) => {
-  if (e.target.closest('[data-copy]')) navigator.clipboard?.writeText(state.settings.pixKey).then(() => toast('Chave PIX copiada.'));
-});
-
-$('#buyForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const btn = e.submitter || $('#buyForm button[type=submit]');
-  busy(btn, true, ' Gerando…');
-  try {
-    const { order } = await api('/api/orders', { method: 'POST', body: { likes: Number(bLikes.value) } });
-    $('#bPix').innerHTML = pixBox(order);
-    $('#bPix').classList.remove('hidden');
-    toast('Pedido criado! Faça o pagamento para liberar o estoque.');
-    scene?.pulse();
-    loadOrders();
-  } catch (err) {
-    alertBox($('#bMsg'), err.message);
-  } finally {
-    busy(btn, false);
-  }
-});
-
-async function loadOrders() {
-  const { orders } = await api('/api/orders');
-  $('#bOrders').innerHTML = table(['#', 'Likes', 'Valor', 'Status', 'Data', ''], orders.map((o) => `<tr>
-    <td>#${o.id}</td><td class="num">${int(o.likes)}</td><td class="num">${brl(o.priceCents)}</td><td>${pill(o.status)}</td><td>${dt(o.createdAt)}</td>
-    <td>${o.status === 'pending' ? `<div class="actions"><button class="btn btn-xs" data-pay="${o.id}">Pagar</button><button class="btn btn-xs btn-danger" data-cancel="${o.id}">Cancelar</button></div>` : ''}</td></tr>`), 'Nenhum pedido ainda.');
-  $('#bOrders').onclick = async (e) => {
-    const pay = e.target.closest('[data-pay]');
-    const cancel = e.target.closest('[data-cancel]');
-    if (pay) {
-      const o = orders.find((x) => x.id === Number(pay.dataset.pay));
-      $('#bPix').innerHTML = pixBox(o);
-      $('#bPix').classList.remove('hidden');
-    }
-    if (cancel) {
-      modal({ title: 'Cancelar pedido', text: `Cancelar o pedido #${cancel.dataset.cancel}?`, okText: 'Cancelar pedido', danger: true, onOk: async () => {
-        await api(`/api/orders/${cancel.dataset.cancel}/cancel`, { method: 'POST' });
-        $('#bPix').classList.add('hidden');
-        loadOrders();
-      } });
-    }
-  };
-}
-
-LOADERS.buy = async () => {
-  await loadMe();
-  renderBuy();
-  loadOrders();
-};
-
-// ------------------------------------------------------------------ admin: visão geral
-async function loadOverview(refresh = false) {
-  const o = await api(`/api/admin/overview${refresh ? '?refresh=1' : ''}`);
-  const g = o.global;
-  $('#mockBanner').classList.toggle('hidden', !o.mock);
-  $('#oRemaining').textContent = g.remaining == null ? 'indisponível' : int(g.remaining);
-  $('#oDot').classList.toggle('off', g.remaining == null);
-  $('#oPlan').textContent = g.error && g.remaining == null ? g.error : `${g.plan === 'daily' ? 'Plano diário' : 'Plano estoque'}${g.expiry ? ` · expira ${new Date(`${g.expiry}T12:00:00`).toLocaleDateString('pt-BR')}` : ''}`;
-  $('#oMeter').style.width = g.stockLimit ? `${Math.min(100, (g.remaining / g.stockLimit) * 100)}%` : '0';
-  $('#oAllocated').textContent = int(g.allocated);
-  $('#oFree').textContent = g.free == null ? '—' : int(g.free);
-  $('#oFree').style.color = g.free != null && g.free < 0 ? 'var(--red)' : '';
-  $('#oToday').textContent = int(o.today.likes);
-  $('#oTodayHint').textContent = `${int(o.today.sends)} envios · ${int(o.today.errors)} erros`;
-  $('#oRevenue').textContent = brl(o.revenueCents);
-  $('#oClients').textContent = int(o.counts.clients);
-  $('#oClientsHint').textContent = `${int(o.counts.active)} ativos`;
-  setBadge('orders', o.counts.pendingOrders);
-  setBadge('requests', o.counts.requests);
-
-  const [{ orders }, { users }] = await Promise.all([api('/api/admin/orders'), api('/api/admin/users')]);
-  const pend = orders.filter((x) => x.status === 'pending').slice(0, 6);
-  $('#oOrders').innerHTML = table(['#', 'Cliente', 'Likes', 'Valor', ''], pend.map((x) => `<tr><td>#${x.id}</td><td>${esc(x.username)}</td><td class="num">${int(x.likes)}</td><td class="num">${brl(x.priceCents)}</td>
-    <td><div class="actions"><button class="btn btn-xs btn-ok" data-approve="${x.id}">Aprovar</button></div></td></tr>`), 'Nenhum pedido pendente.');
-  const reqs = users.filter((u) => u.status === 'pending').slice(0, 6);
-  $('#oRequests').innerHTML = table(['Usuário', 'Contato', ''], reqs.map((u) => `<tr><td>${esc(u.username)}</td><td>${esc(u.contact)}</td>
-    <td><div class="actions"><button class="btn btn-xs btn-ok" data-req-approve="${u.id}">Aprovar</button><button class="btn btn-xs btn-danger" data-req-reject="${u.id}">Recusar</button></div></td></tr>`), 'Nenhuma solicitação.');
-}
-LOADERS.overview = () => loadOverview();
-$('#refreshOverview').addEventListener('click', async (e) => {
-  const btn = e.currentTarget;
-  busy(btn, true, ' Atualizando…');
-  try { await loadOverview(true); toast('Saldo da API atualizado.'); } catch (err) { toast(err.message, 'error'); } finally { busy(btn, false); }
-});
-
-// ações de pedidos e solicitações (compartilhadas entre telas)
-document.addEventListener('click', (e) => {
-  const approve = e.target.closest('[data-approve]');
-  const reject = e.target.closest('[data-reject]');
-  const reqA = e.target.closest('[data-req-approve]');
-  const reqR = e.target.closest('[data-req-reject]');
-  const refresh = () => LOADERS[current]?.();
-  if (approve) {
-    const id = approve.dataset.approve;
-    const doApprove = (force) => api(`/api/admin/orders/${id}/approve`, { method: 'POST', body: { force } });
-    modal({ title: `Aprovar pedido #${id}`, text: 'Confirme que o pagamento foi recebido. O estoque individual do cliente será creditado.', okText: 'Aprovar', onOk: async () => {
-      try { await doApprove(false); } catch (err) {
-        if (!err.data?.needsForce) throw err;
-        setTimeout(() => modal({ title: 'Estoque global baixo', text: err.message, okText: 'Aprovar mesmo assim', danger: true, onOk: async () => { await doApprove(true); toast('Pedido aprovado.'); refresh(); } }), 50);
-        return;
-      }
-      toast('Pedido aprovado e estoque creditado.');
-      refresh();
-    } });
-  }
-  if (reject) {
-    modal({ title: `Recusar pedido #${reject.dataset.reject}`, okText: 'Recusar', danger: true, onOk: async () => {
-      await api(`/api/admin/orders/${reject.dataset.reject}/reject`, { method: 'POST' }); refresh();
-    } });
-  }
-  if (reqA) api(`/api/admin/requests/${reqA.dataset.reqApprove}/approve`, { method: 'POST' }).then(() => { toast('Acesso aprovado.'); refresh(); }).catch((err) => toast(err.message, 'error'));
-  if (reqR) modal({ title: 'Recusar solicitação', text: 'O cadastro será removido.', okText: 'Recusar', danger: true, onOk: async () => {
-    await api(`/api/admin/requests/${reqR.dataset.reqReject}/reject`, { method: 'POST' }); refresh();
-  } });
-});
-
-// ------------------------------------------------------------------ admin: clientes
-let clients = [];
-function renderClients() {
-  const q = $('#cSearch').value.trim().toLowerCase();
-  const list = clients.filter((u) => u.status !== 'pending' && (!q || u.username.toLowerCase().includes(q) || u.contact.toLowerCase().includes(q)));
-  $('#cCount').textContent = `${int(list.length)} clientes · ${int(list.reduce((a, u) => a + u.stock, 0))} likes alocados`;
-  $('#cTable').innerHTML = table(['Usuário', 'Status', 'Estoque', 'Usado', 'Validade', 'Contato', 'Último login', ''], list.map((u) => `<tr>
-    <td><strong>${esc(u.username)}</strong></td><td>${u.expired ? pill('blocked').replace('Bloqueado', 'Expirado') : pill(u.status)}</td><td class="num">${int(u.stock)}</td><td class="num">${int(u.usedTotal)}</td>
-    <td>${u.expiresAt ? new Date(`${u.expiresAt}T12:00:00`).toLocaleDateString('pt-BR') : '∞'}</td><td>${esc(u.contact || '—')}</td><td>${dt(u.lastLoginAt)}</td>
-    <td><div class="actions">
-      <button class="btn btn-xs" data-stock="${u.id}">Estoque</button>
-      <button class="btn btn-xs" data-exp="${u.id}">Validade</button>
-      <button class="btn btn-xs" data-pass="${u.id}">Senha</button>
-      <button class="btn btn-xs ${u.status === 'active' ? 'btn-danger' : 'btn-ok'}" data-toggle="${u.id}">${u.status === 'active' ? 'Bloquear' : 'Ativar'}</button>
-      <button class="btn btn-xs btn-danger" data-del="${u.id}" aria-label="Excluir">✕</button>
-    </div></td></tr>`), 'Nenhum cliente cadastrado.');
-}
-LOADERS.clients = async () => { clients = (await api('/api/admin/users')).users; renderClients(); };
-$('#cSearch').addEventListener('input', renderClients);
-
-$('#cForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  try {
-    const { user } = await api('/api/admin/users', { method: 'POST', body: { username: $('#cUser').value, password: $('#cPass').value, stock: Number($('#cStock').value) || 0, contact: $('#cContact').value } });
-    alertBox($('#cMsg'), `Acesso criado: ${user.username}`, 'ok');
-    e.target.reset();
-    LOADERS.clients();
-  } catch (err) { alertBox($('#cMsg'), err.message); }
-});
-
-$('#cTable').addEventListener('click', (e) => {
-  const find = (attr) => { const b = e.target.closest(`[${attr}]`); return b && clients.find((u) => u.id === Number(b.getAttribute(attr))); };
-  const patch = (u, body) => api(`/api/admin/users/${u.id}`, { method: 'PATCH', body });
-  let u;
-  if ((u = find('data-stock'))) {
-    modal({
-      title: `Estoque de ${u.username}`, text: `Estoque atual: ${int(u.stock)} likes. Use valores negativos para remover.`,
-      body: `<div class="field"><label>Ajuste (likes)</label><input class="input mono" id="mDelta" type="number" step="2000" value="20000" /></div>
-        <div class="chips" style="margin-top:10px">${[20000, 50000, 100000, -2000].map((n) => `<button type="button" class="chip" onclick="document.getElementById('mDelta').value=${n};document.getElementById('mDelta').dispatchEvent(new Event('input'))">${n > 0 ? '+' : ''}${int(n)}</button>`).join('')}</div>
-        <p class="muted" id="mNew" style="margin:12px 0 0"></p>`,
-      okText: 'Aplicar',
-      onOk: async () => { await patch(u, { stockDelta: Number($('#mDelta').value) }); toast('Estoque atualizado.'); LOADERS.clients(); },
+function confirmModal({ title, text, okText = 'Confirmar', danger = false, input = null }) {
+  return new Promise((resolve) => {
+    openModal({
+      title,
+      body: `<p style="color:var(--text-2);font-size:14px">${text}</p>${input ? `<div class="field"><label for="cfIn">${input.label}</label><input class="input" id="cfIn" placeholder="${esc(input.placeholder || '')}" value="${esc(input.value || '')}" /></div>` : ''}<div class="alert" id="cfMsg"></div>`,
+      foot: `<button class="btn" id="cfNo">Cancelar</button><button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="cfYes">${okText}</button>`,
     });
-    const upd = () => { $('#mNew').textContent = `Novo estoque: ${int(u.stock + (Number($('#mDelta').value) || 0))} likes`; };
-    $('#mDelta').addEventListener('input', upd); upd();
-  } else if ((u = find('data-exp'))) {
-    modal({ title: `Validade de ${u.username}`, text: 'Depois dessa data o cliente não consegue enviar likes nem usar a API. Deixe em branco para sem expiração.',
-      body: `<div class="field"><label>Expira em</label><input class="input mono" id="mExp" type="date" value="${esc(u.expiresAt || '')}" /></div>`, okText: 'Salvar',
-      onOk: async () => { await patch(u, { expiresAt: $('#mExp').value || null }); toast('Validade atualizada.'); LOADERS.clients(); } });
-  } else if ((u = find('data-pass'))) {
-    modal({ title: `Nova senha para ${u.username}`, body: '<div class="field"><label>Senha</label><input class="input" id="mPass" minlength="6" /></div>', okText: 'Salvar',
-      onOk: async () => { await patch(u, { password: $('#mPass').value }); toast('Senha alterada.'); } });
-  } else if ((u = find('data-toggle'))) {
-    patch(u, { status: u.status === 'active' ? 'blocked' : 'active' }).then(() => LOADERS.clients()).catch((err) => toast(err.message, 'error'));
-  } else if ((u = find('data-del'))) {
-    modal({ title: `Excluir ${u.username}?`, text: `O acesso e o estoque de ${int(u.stock)} likes serão removidos. Esta ação não pode ser desfeita.`, okText: 'Excluir', danger: true,
-      onOk: async () => { await api(`/api/admin/users/${u.id}`, { method: 'DELETE' }); LOADERS.clients(); } });
+    $('#cfNo').onclick = () => { closeModal(); resolve(null); };
+    $('#cfYes').onclick = () => resolve({ value: $('#cfIn')?.value ?? true, done: closeModal, fail: (m) => alertBox($('#cfMsg'), m), btn: $('#cfYes') });
+  });
+}
+
+// ------------------------------------------------------------------ gráfico (uma série, barras finas, tooltip por barra)
+const charts = new Map();
+const ro = new ResizeObserver((entries) => { for (const e of entries) { const c = charts.get(e.target); if (c && Math.abs(c.w - e.contentRect.width) > 4) barChart(e.target, c.days, c.opts); } });
+function barChart(el, days, opts = {}) {
+  const { label = 'Recebido' } = opts;
+  // desenha na largura real do cartão: texto sempre em tamanho legível
+  const W = Math.max(280, Math.round(el.clientWidth - 2)), H = W < 500 ? 200 : 230, padL = 56, padB = 26, padT = 12;
+  charts.set(el, { w: el.clientWidth, days, opts });
+  ro.observe(el);
+  const every = W < 500 ? 3 : 2;
+  const max = Math.max(...days.map((d) => d.amount), 0);
+  const nice = (v) => { if (!v) return 10000; const p = 10 ** Math.floor(Math.log10(v)); const m = v / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; };
+  const top = nice(max);
+  const step = (W - padL) / days.length;
+  const bw = Math.min(26, step * 0.56);
+  const y = (v) => H - padB - ((H - padB - padT) * v) / top;
+  const ticks = [0, top / 2, top];
+  const short = (c) => (c >= 100000 ? `R$ ${int(Math.round(c / 100000))} mil` : brl(c).replace(',00', ''));
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${label} por dia, últimos ${days.length} dias">`;
+  for (const t of ticks) svg += `<line class="grid-line" x1="${padL}" x2="${W}" y1="${y(t)}" y2="${y(t)}"/><text class="axis" x="${padL - 8}" y="${y(t) + 4}" text-anchor="end">${short(t)}</text>`;
+  days.forEach((d, i) => {
+    const x = padL + i * step + (step - bw) / 2;
+    const h = Math.max(d.amount ? 3 : 2, H - padB - y(d.amount));
+    const yy = H - padB - h;
+    const r = Math.min(4, bw / 2);
+    // barra com topo arredondado (4px) ancorada na base
+    const path = `M${x},${H - padB} V${yy + r} Q${x},${yy} ${x + r},${yy} H${x + bw - r} Q${x + bw},${yy} ${x + bw},${yy + r} V${H - padB} Z`;
+    svg += `<rect class="hit" x="${padL + i * step}" y="${padT}" width="${step}" height="${H - padB - padT}" data-i="${i}"/><path class="bar ${d.amount ? '' : 'zero'}" d="${path}" data-b="${i}"/>`;
+    if ((days.length - 1 - i) % every === 0) svg += `<text class="axis" x="${x + bw / 2}" y="${H - 8}" text-anchor="middle">${d.day.slice(8)}/${d.day.slice(5, 7)}</text>`;
+  });
+  svg += '</svg>';
+  el.innerHTML = `${svg}<div class="tip hidden"></div>`;
+  const tip = el.querySelector('.tip');
+  const svgEl = el.querySelector('svg');
+  const show = (i) => {
+    const d = days[i];
+    const box = svgEl.getBoundingClientRect(), host = el.getBoundingClientRect();
+    const sx = box.width / W, sy = box.height / H;
+    const x = (padL + i * step + step / 2) * sx + (box.left - host.left);
+    const yy = y(d.amount) * sy + (box.top - host.top) - 8;
+    const date = new Date(`${d.day}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+    tip.innerHTML = `<b>${brl(d.amount)}</b><span>${date}${d.count != null ? ` · ${int(d.count)} PIX` : ''}${d.fees != null ? ` · taxas ${brl(d.fees)}` : ''}</span>`;
+    tip.style.left = `${Math.min(Math.max(x, 70), host.width - 70)}px`;
+    tip.style.top = `${yy}px`;
+    tip.classList.remove('hidden');
+    el.querySelectorAll('.bar').forEach((b) => b.classList.toggle('hl', b.dataset.b === String(i)));
+  };
+  el.querySelectorAll('.hit').forEach((h) => {
+    h.addEventListener('mouseenter', () => show(Number(h.dataset.i)));
+    h.addEventListener('click', () => show(Number(h.dataset.i)));
+  });
+  svgEl.addEventListener('mouseleave', () => { tip.classList.add('hidden'); el.querySelectorAll('.bar').forEach((b) => b.classList.remove('hl')); });
+}
+
+// ------------------------------------------------------------------ lojista: linhas de cobrança
+const chargeRow = (c) => `<div class="row click cols-charge" data-charge="${esc(c.id)}">
+  <div class="t"><strong>${esc(c.description || 'Cobrança PIX')}</strong><span>${dt(c.created_at)} · <span class="mono">${esc(c.external_id || c.id)}</span></span></div>
+  <div class="t hide-sm"><strong>${esc(c.payer?.name || '—')}</strong><span>${esc(c.payer?.email || '')}</span></div>
+  <div class="amt" style="order:3">${brl(c.amount)}<small>líquido ${brl(c.net_amount)}</small></div>
+  <div style="order:2">${status(c.status)}</div>
+</div>`;
+document.addEventListener('click', (e) => { const r = e.target.closest('[data-charge]'); if (r) openCharge(r.dataset.charge); });
+
+LOADERS.home = async () => {
+  const o = await api('/api/merchant/overview');
+  const u = state.me;
+  $('#hello').textContent = `Olá, ${u.name.split(' ')[0]}`;
+  $('#hBalance').textContent = brl(o.balance.available);
+  $('#hBalanceSub').textContent = o.balance.pendingWithdrawals ? `${brl(o.balance.pendingWithdrawals)} em saques em análise` : 'pronto para sacar';
+  $('#hToday').textContent = brl(o.today.amount);
+  $('#hTodayCount').textContent = `${int(o.today.count)} ${o.today.count === 1 ? 'PIX pago' : 'PIX pagos'}`;
+  $('#hGross').textContent = brl(o.balance.gross);
+  $('#hConv').textContent = o.conversion == null ? '—' : `${o.conversion}%`;
+  $('#hFee').textContent = `${String(u.feePercent).replace('.', ',')}%`;
+  $('#hFeeMin').textContent = `mínimo de ${brl(u.feeMinCents)} por PIX`;
+  const sum = o.days.reduce((a, d) => a + d.amount, 0);
+  const n = o.days.reduce((a, d) => a + d.count, 0);
+  $('#hChartSub').textContent = `${brl(sum)} em ${int(n)} ${n === 1 ? 'PIX pago' : 'PIX pagos'}`;
+  barChart($('#hChart'), o.days);
+  $('#hRecent').innerHTML = o.recent.length ? o.recent.map((c) => `<div class="row click" style="grid-template-columns:minmax(0,1fr) auto" data-charge="${esc(c.id)}">
+      <div class="t"><strong>${esc(c.description || 'Cobrança PIX')}</strong><span>${dt(c.created_at)}</span></div>
+      <div class="amt">${brl(c.amount)}<small>${status(c.status)}</small></div></div>`).join('')
+    : '<div class="empty"><b>Nenhuma cobrança ainda</b>Crie a primeira e mande o link para o seu cliente.</div>';
+  setBadge('charges', o.pending);
+};
+
+let cStatus = '', cTimer = null;
+LOADERS.charges = async () => {
+  const qs = new URLSearchParams({ status: cStatus, q: $('#cSearch').value, days: $('#cDays').value });
+  const { charges, total } = await api(`/api/merchant/charges?${qs}`);
+  $('#cSub').textContent = `${int(charges.length)} ${charges.length === 1 ? 'cobrança' : 'cobranças'} · ${brl(total)} recebidos no período`;
+  $('#cList').innerHTML = charges.length ? charges.map(chargeRow).join('') : '<div class="empty"><b>Nada por aqui</b>Nenhuma cobrança com esses filtros.</div>';
+};
+$('#cStatus').addEventListener('click', (e) => { const b = e.target.closest('[data-s]'); if (!b) return; cStatus = b.dataset.s; $$('#cStatus button').forEach((x) => x.classList.toggle('on', x === b)); LOADERS.charges(); });
+$('#cSearch').addEventListener('input', () => { clearTimeout(cTimer); cTimer = setTimeout(() => LOADERS.charges(), 300); });
+$('#cDays').addEventListener('change', () => LOADERS.charges());
+
+// ------------------------------------------------------------------ nova cobrança
+function newCharge() {
+  openModal({
+    title: 'Nova cobrança PIX',
+    body: `<form class="form" id="ncForm">
+      <div class="field"><label for="ncAmount">Valor</label><div class="input-money"><span>R$</span><input class="input num" id="ncAmount" inputmode="numeric" placeholder="0,00" required /></div></div>
+      <div class="field"><label for="ncDesc">Descrição</label><input class="input" id="ncDesc" maxlength="140" placeholder="Ex.: Pedido #1024" /></div>
+      <div class="two"><div class="field"><label for="ncName">Nome do cliente <span class="muted">(opcional)</span></label><input class="input" id="ncName" /></div>
+      <div class="field"><label for="ncEmail">E-mail do cliente <span class="muted">(opcional)</span></label><input class="input" id="ncEmail" type="email" /></div></div>
+      <div class="field"><label>Validade do PIX</label><div class="chips" id="ncExp"><button type="button" class="chip" data-e="900">15 min</button><button type="button" class="chip on" data-e="1800">30 min</button><button type="button" class="chip" data-e="3600">1 hora</button><button type="button" class="chip" data-e="86400">24 horas</button></div></div>
+      <div class="kv" id="ncSum"></div>
+      <div class="alert" id="ncMsg"></div>
+    </form>`,
+    foot: '<button class="btn" id="ncCancel">Cancelar</button><button class="btn btn-primary" id="ncGo">Gerar PIX</button>',
+  });
+  let exp = 1800;
+  const amount = $('#ncAmount');
+  moneyMask(amount);
+  const sum = () => {
+    const v = toCents(amount.value) || 0;
+    const fee = v ? Math.min(v, Math.max(state.me.feeMinCents, Math.round((v * state.me.feePercent) / 100))) : 0;
+    $('#ncSum').innerHTML = `<div><span>Cliente paga</span><b>${brl(v)}</b></div><div><span>Taxa Zyropay</span><b>− ${brl(fee)}</b></div><div class="total"><span>Você recebe</span><b>${brl(v - fee)}</b></div>`;
+  };
+  amount.addEventListener('input', sum);
+  sum();
+  $('#ncExp').addEventListener('click', (e) => { const c = e.target.closest('[data-e]'); if (!c) return; exp = Number(c.dataset.e); $$('#ncExp .chip').forEach((x) => x.classList.toggle('on', x === c)); });
+  $('#ncCancel').onclick = closeModal;
+  const submit = async () => {
+    const btn = $('#ncGo');
+    const v = toCents(amount.value);
+    if (!(v >= state.limits.minCharge)) { alertBox($('#ncMsg'), `O valor mínimo é ${brl(state.limits.minCharge)}.`); return; }
+    busy(btn, true, ' Gerando…');
+    try {
+      const r = await api('/api/merchant/charges', { method: 'POST', body: { amount: v, description: $('#ncDesc').value, expires_in: exp, payer: { name: $('#ncName').value || undefined, email: $('#ncEmail').value || undefined } } });
+      showCharge(r.charge, r.qrImage, true);
+      toast('PIX gerado!');
+      if (current === 'charges' || current === 'home') LOADERS[current]();
+    } catch (err) { alertBox($('#ncMsg'), err.message); busy(btn, false); }
+  };
+  $('#ncGo').onclick = submit;
+  $('#ncForm').addEventListener('submit', (e) => { e.preventDefault(); submit(); });
+}
+
+// ------------------------------------------------------------------ detalhe da cobrança
+async function openCharge(id) {
+  openModal({ title: 'Cobrança', body: '<div class="empty"><i class="spinner" style="margin:0 auto"></i></div>' });
+  try {
+    const r = await api(`/api/merchant/charges/${encodeURIComponent(id)}`);
+    showCharge(r.charge, r.qrImage, false, r.webhooks);
+  } catch (err) { $('#mBody').innerHTML = `<div class="alert error show">${esc(err.message)}</div>`; }
+}
+
+function showCharge(c, qrImage, fresh, webhooks = []) {
+  clearInterval(modalPoll);
+  const pending = c.status === 'pending';
+  openModal({
+    title: fresh ? 'PIX gerado' : 'Cobrança',
+    body: `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div><div style="font-family:var(--display);font-size:30px;font-weight:700" class="num">${brl(c.amount)}</div><div class="muted" style="font-size:14px">${esc(c.description || 'Cobrança PIX')}</div></div>${status(c.status)}
+      </div>
+      ${pending && qrImage ? `<div class="qr-box"><img src="${qrImage}" alt="QR Code PIX" /></div>` : ''}
+      ${pending ? `<div class="field"><label>PIX copia e cola</label><div class="secret"><code>${esc(c.pix.copy_paste)}</code><button class="btn btn-sm" data-copy="${esc(c.pix.copy_paste)}">Copiar</button></div></div>
+      <div class="field"><label>Link de pagamento</label><div class="secret"><code>${esc(c.checkout_url)}</code><button class="btn btn-sm" data-copy="${esc(c.checkout_url)}">Copiar</button></div><span class="hint">Mande este link para o cliente: ele mostra o QR e confirma o pagamento sozinho.</span></div>` : ''}
+      <div class="kv">
+        <div><span>Taxa</span><b>− ${brl(c.fee)}</b></div>
+        <div><span>Você recebe</span><b>${brl(c.net_amount)}</b></div>
+        <div><span>Criada em</span><b>${dt(c.created_at)}</b></div>
+        <div><span>${c.paid_at ? 'Paga em' : 'Expira em'}</span><b>${dt(c.paid_at || c.expires_at)}</b></div>
+        ${c.payer?.name || c.payer?.email ? `<div><span>Pagador</span><b>${esc([c.payer.name, c.payer.email].filter(Boolean).join(' · '))}</b></div>` : ''}
+        ${c.external_id ? `<div><span>ID externo</span><b class="mono">${esc(c.external_id)}</b></div>` : ''}
+        <div><span>ID</span><b class="mono">${esc(c.id)}</b></div>
+      </div>
+      ${webhooks.length ? `<div class="kv">${webhooks.map((w) => `<div><span class="mono">${esc(w.event)}</span><b>${status(w.status)}</b></div>`).join('')}</div>` : ''}`,
+    foot: [
+      pending && state.mock ? '<button class="btn" id="cdSim">Simular pagamento</button>' : '',
+      pending ? '<button class="btn btn-danger" id="cdCancel">Cancelar cobrança</button>' : '',
+      pending ? `<a class="btn btn-primary" href="${esc(c.checkout_url)}" target="_blank" rel="noopener">Abrir checkout</a>` : '<button class="btn" id="cdClose">Fechar</button>',
+    ].join(''),
+  });
+  $$('#mBody [data-copy]').forEach((b) => b.addEventListener('click', () => copy(b.dataset.copy)));
+  $('#cdClose')?.addEventListener('click', closeModal);
+  $('#cdSim')?.addEventListener('click', async () => { const r = await api(`/api/merchant/charges/${c.id}/simulate`, { method: 'POST' }); toast('Pagamento simulado.'); showCharge(r.charge, null, false); LOADERS[current]?.(); });
+  $('#cdCancel')?.addEventListener('click', async () => {
+    try { const r = await api(`/api/merchant/charges/${c.id}/cancel`, { method: 'POST' }); toast('Cobrança cancelada.'); showCharge(r.charge, null, false); LOADERS[current]?.(); } catch (err) { toast(err.message, 'error'); }
+  });
+  // enquanto estiver aberta e pendente, confere se foi paga
+  if (pending) {
+    modalPoll = setInterval(async () => {
+      if (!$('#modal').classList.contains('show')) return clearInterval(modalPoll);
+      const r = await api(`/api/merchant/charges/${c.id}`).catch(() => null);
+      if (r && r.charge.status !== 'pending') { toast(r.charge.status === 'paid' ? `PIX de ${brl(r.charge.amount)} recebido!` : 'A cobrança mudou de status.'); showCharge(r.charge, null, false, r.webhooks); LOADERS[current]?.(); }
+    }, 4000);
   }
+}
+
+// ------------------------------------------------------------------ saques
+moneyMask($('#wAmount'));
+let wAvailable = 0;
+LOADERS.withdrawals = async () => {
+  const { withdrawals, balance } = await api('/api/merchant/withdrawals');
+  wAvailable = balance.available;
+  $('#wAvail').textContent = brl(balance.available);
+  $('#wPending').textContent = brl(balance.pendingWithdrawals);
+  if (!$('#wKey').value) $('#wKey').value = state.me.pixKey || '';
+  $('#wList').innerHTML = withdrawals.length ? withdrawals.map((w) => `<div class="row cols-wd">
+      <div class="t"><strong>${esc(w.pixKey)}</strong><span>${w.note ? esc(w.note) : `Saque #${w.id}`}</span></div>
+      <div class="t hide-sm"><strong>${dt(w.createdAt)}</strong><span>${w.closedAt ? `finalizado ${dt(w.closedAt)}` : ''}</span></div>
+      <div class="amt" style="order:3">${brl(w.amount)}</div><div style="order:2">${status(w.status)}</div></div>`).join('')
+    : '<div class="empty"><b>Nenhum saque ainda</b>Quando tiver saldo, peça o saque ao lado.</div>';
+};
+$('#wAll').addEventListener('click', () => { $('#wAmount').value = (wAvailable / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }); });
+$('#wForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.submitter || $('#wForm button[type=submit]');
+  busy(btn, true, ' Enviando…');
+  try {
+    await api('/api/merchant/withdrawals', { method: 'POST', body: { amount: toCents($('#wAmount').value), pixKey: $('#wKey').value } });
+    alertBox($('#wMsg'), 'Saque solicitado! Você será avisado quando for pago.', 'ok');
+    $('#wAmount').value = '';
+    LOADERS.withdrawals();
+  } catch (err) { alertBox($('#wMsg'), err.message); } finally { busy(btn, false); }
 });
 
-LOADERS.requests = async () => {
-  const { users } = await api('/api/admin/users');
-  const reqs = users.filter((u) => u.status === 'pending');
-  setBadge('requests', reqs.length);
-  $('#rTable').innerHTML = table(['Usuário', 'Contato', 'Pedido em', ''], reqs.map((u) => `<tr><td><strong>${esc(u.username)}</strong></td><td>${esc(u.contact)}</td><td>${dt(u.createdAt)}</td>
-    <td><div class="actions"><button class="btn btn-xs btn-ok" data-req-approve="${u.id}">Aprovar</button><button class="btn btn-xs btn-danger" data-req-reject="${u.id}">Recusar</button></div></td></tr>`), 'Nenhuma solicitação pendente.');
+// ------------------------------------------------------------------ integração
+let secretShown = false;
+LOADERS.integration = async () => {
+  const u = state.me;
+  $('#iKey').textContent = u.apiKeyPrefix || 'Nenhuma chave gerada';
+  $('#iKeyNew').textContent = u.apiKeyPrefix ? 'Gerar nova chave' : 'Gerar chave';
+  $('#iKeyCopy').classList.add('hidden');
+  alertBox($('#iKeyNote'));
+  $('#iUrl').value = u.webhookUrl || '';
+  secretShown = false;
+  $('#iSecret').textContent = 'whsec_••••••••••••••••';
+  $('#iSecretShow').textContent = 'Mostrar';
+  loadHooks();
 };
-
-LOADERS.orders = async () => {
-  const { orders } = await api('/api/admin/orders');
-  setBadge('orders', orders.filter((o) => o.status === 'pending').length);
-  $('#ordTable').innerHTML = table(['#', 'Cliente', 'Likes', 'Valor', 'Status', 'Criado', ''], orders.map((o) => `<tr>
-    <td>#${o.id}</td><td>${esc(o.username)}</td><td class="num">${int(o.likes)}</td><td class="num">${brl(o.priceCents)}</td><td>${pill(o.status)}</td><td>${dt(o.createdAt)}</td>
-    <td>${o.status === 'pending' ? `<div class="actions"><button class="btn btn-xs btn-ok" data-approve="${o.id}">Aprovar</button><button class="btn btn-xs btn-danger" data-reject="${o.id}">Recusar</button></div>` : ''}</td></tr>`), 'Nenhum pedido.');
-};
-
-// ------------------------------------------------------------------ admin: envios
-let sendSrc = 'local';
-LOADERS.sends = async () => {
-  $('#aSends').innerHTML = '<div class="empty">Carregando…</div>';
-  try {
-    if (sendSrc === 'local') {
-      const { sends } = await api('/api/admin/sends');
-      $('#aSends').innerHTML = table(['Data', 'Usuário', ...SEND_HEAD.slice(1)], sends.map((s) => sendRow(s, true)));
-    } else {
-      const { logs } = await api('/api/admin/remote-logs?limit=100&days=30');
-      $('#aSends').innerHTML = table(['Log', 'ID', 'Likes', 'Status', 'Origem', 'Data'], (logs || []).map((l) => `<tr><td>#${l.log_id}</td><td class="mono">${esc(l.target_id)}</td>
-        <td class="num">${int(l.likes_sent)}</td><td>${pill(l.status)}</td><td>${esc(l.action)}</td><td>${dt(l.timestamp)}</td></tr>`));
-    }
-  } catch (err) { $('#aSends').innerHTML = `<div class="empty">${esc(err.message)}</div>`; }
-};
-$$('[data-src]').forEach((b) => b.addEventListener('click', () => {
-  sendSrc = b.dataset.src;
-  $$('[data-src]').forEach((x) => x.classList.toggle('on', x === b));
-  LOADERS.sends();
-}));
-
-// ------------------------------------------------------------------ admin: configurações
-LOADERS.settings = async () => {
-  const { settings } = await api('/api/admin/settings');
-  $('#stPix').value = settings.pixKey; $('#stHolder').value = settings.pixHolder; $('#stContact').value = settings.contact; $('#stNote').value = settings.paymentNote;
-};
-$('#setForm').addEventListener('submit', async (e) => {
+async function loadHooks() {
+  const { deliveries } = await api('/api/merchant/deliveries');
+  $('#iHooks').innerHTML = deliveries.length ? deliveries.map((d) => `<div class="row cols-hook">
+    <div class="t"><strong class="mono">${esc(d.event)}</strong><span class="mono">${esc(d.ref || '')}</span></div>
+    <div class="t hide-sm"><strong>${dt(d.at)}</strong><span>${int(d.attempts)} ${d.attempts === 1 ? 'tentativa' : 'tentativas'}</span></div>
+    <div class="amt" style="order:3"><span class="mono" style="font-weight:600">${d.lastCode ? `HTTP ${d.lastCode}` : esc(d.lastError || '—')}</span></div>
+    <div style="order:2">${status(d.status === 'delivered' ? 'delivered' : d.status === 'failed' ? 'failed' : 'pending')}</div></div>`).join('')
+    : '<div class="empty"><b>Nenhum aviso enviado ainda</b>Cadastre a URL do webhook e clique em “Enviar teste”.</div>';
+}
+$('#iReload').addEventListener('click', loadHooks);
+$('#iKeyNew').addEventListener('click', async () => {
+  if (state.me.apiKeyPrefix) {
+    const ok = await confirmModal({ title: 'Gerar nova chave', text: 'A chave atual para de funcionar na hora. Atualize seu sistema com a nova chave.', okText: 'Gerar nova', danger: true });
+    if (!ok) return;
+    ok.done();
+  }
+  const r = await api('/api/merchant/apikey', { method: 'POST' });
+  state.me.apiKeyPrefix = r.prefix;
+  $('#iKey').textContent = r.apiKey;
+  $('#iKeyCopy').classList.remove('hidden');
+  $('#iKeyCopy').onclick = () => copy(r.apiKey, 'Chave copiada');
+  $('#iKeyNew').textContent = 'Gerar nova chave';
+  alertBox($('#iKeyNote'), 'Copie e guarde esta chave agora. Ela não será mostrada de novo.', 'info');
+});
+$('#iSecretShow').addEventListener('click', async () => {
+  if (secretShown) { secretShown = false; $('#iSecret').textContent = 'whsec_••••••••••••••••'; $('#iSecretShow').textContent = 'Mostrar'; return; }
+  const { secret } = await api('/api/merchant/webhook-secret');
+  secretShown = true;
+  $('#iSecret').textContent = secret;
+  $('#iSecretShow').textContent = 'Ocultar';
+});
+$('#iRotate').addEventListener('click', async () => {
+  const ok = await confirmModal({ title: 'Trocar segredo do webhook', text: 'Os próximos avisos serão assinados com o novo segredo. Atualize a validação no seu sistema.', okText: 'Trocar segredo', danger: true });
+  if (!ok) return;
+  ok.done();
+  const { secret } = await api('/api/merchant/webhook-secret', { method: 'POST' });
+  secretShown = true;
+  $('#iSecret').textContent = secret;
+  $('#iSecretShow').textContent = 'Ocultar';
+  toast('Segredo trocado.');
+});
+$('#hookForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
-    await api('/api/admin/settings', { method: 'PUT', body: { pixKey: $('#stPix').value, pixHolder: $('#stHolder').value, contact: $('#stContact').value, paymentNote: $('#stNote').value } });
-    alertBox($('#stMsg'), 'Configurações salvas.', 'ok');
-  } catch (err) { alertBox($('#stMsg'), err.message); }
+    const r = await api('/api/merchant/settings', { method: 'PUT', body: { webhookUrl: $('#iUrl').value } });
+    state.me = r.user;
+    alertBox($('#iMsg'), 'Webhook salvo.', 'ok');
+  } catch (err) { alertBox($('#iMsg'), err.message); }
+});
+$('#iTest').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  busy(btn, true, ' Enviando…');
+  try {
+    const r = await api('/api/merchant/webhook-test', { method: 'POST' });
+    alertBox($('#iMsg'), r.ok ? `Teste entregue (HTTP ${r.code}).` : `Seu servidor não confirmou: ${r.error || `HTTP ${r.code}`}. Vamos tentar de novo automaticamente.`, r.ok ? 'ok' : 'error');
+    loadHooks();
+  } catch (err) { alertBox($('#iMsg'), err.message); } finally { busy(btn, false); }
 });
 
-// ------------------------------------------------------------------ inicialização
-(async () => {
-  try { await loadMe(); } catch { location.href = '/#acesso'; return; }
-  renderMenu();
-  go(location.hash.slice(1) || MENUS[state.me.role][0][0]);
-  if (state.me.role === 'admin') api('/api/admin/overview').then((o) => { setBadge('orders', o.counts.pendingOrders); setBadge('requests', o.counts.requests); }).catch(() => {});
-  addEventListener('hashchange', () => { const v = location.hash.slice(1); if (v && v !== current) go(v); });
-  // Mantém o estoque global atualizado
-  setInterval(() => { if (!document.hidden && (current === 'dashboard')) LOADERS.dashboard().catch(() => {}); }, 60000);
-})();
+// ------------------------------------------------------------------ conta
+LOADERS.account = async () => {
+  const u = state.me;
+  $('#aName').value = u.name; $('#aEmail').value = u.email; $('#aDoc').value = u.document; $('#aPhone').value = u.phone; $('#aPix').value = u.pixKey;
+  $('#aFee').textContent = `${String(u.feePercent).replace('.', ',')}% (mínimo ${brl(u.feeMinCents)})`;
+};
+$('#accForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const r = await api('/api/merchant/settings', { method: 'PUT', body: { name: $('#aName').value, phone: $('#aPhone').value, pixKey: $('#aPix').value } });
+    state.me = r.user; paintWho();
+    alertBox($('#aMsg'), 'Dados salvos.', 'ok');
+  } catch (err) { alertBox($('#aMsg'), err.message); }
+});
+$('#pwForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await api('/api/merchant/settings', { method: 'PUT', body: { currentPassword: $('#pCur').value, newPassword: $('#pNew').value } });
+    e.target.reset();
+    alertBox($('#pMsg'), 'Senha trocada.', 'ok');
+  } catch (err) { alertBox($('#pMsg'), err.message); }
+});
 
-// Sessão expirada em qualquer chamada → volta para o login
-addEventListener('unhandledrejection', (e) => { if (e.reason?.status === 401) location.href = '/#acesso'; });
+// ------------------------------------------------------------------ admin
+LOADERS['admin-home'] = async () => {
+  const o = await api('/api/admin/overview');
+  $('#adTpv').textContent = brl(o.tpv);
+  $('#adRev').textContent = brl(o.revenue);
+  $('#adRevToday').textContent = `${brl(o.today.fees)} hoje em ${int(o.today.count)} PIX`;
+  $('#adOwed').textContent = brl(o.owed);
+  $('#adMerch').textContent = int(o.merchants.active);
+  $('#adMerchSub').textContent = o.merchants.pending ? `${int(o.merchants.pending)} aguardando aprovação` : 'nenhum cadastro em análise';
+  $('#adSub').textContent = `Provedor: ${o.provider === 'mercadopago' ? 'Mercado Pago' : 'simulado (testes)'}`;
+  $('#adChartSub').textContent = `${brl(o.days.reduce((a, d) => a + d.amount, 0))} processados · ${brl(o.days.reduce((a, d) => a + d.fees, 0))} em taxas`;
+  barChart($('#adChart'), o.days, { label: 'Volume' });
+  setBadge('admin-merchants', o.merchants.pending);
+  setBadge('admin-withdrawals', o.pendingWithdrawals);
+};
+
+let mStatus = '', merchants = [];
+LOADERS['admin-merchants'] = async () => {
+  merchants = (await api('/api/admin/merchants')).merchants;
+  setBadge('admin-merchants', merchants.filter((m) => m.status === 'pending').length);
+  const list = merchants.filter((m) => !mStatus || m.status === mStatus);
+  $('#mList').innerHTML = list.length ? list.map((m) => `<div class="row cols-merch">
+    <div class="t"><strong>${esc(m.name)}</strong><span>${esc(m.email)} · <span class="mono">${esc(m.document)}</span>${m.phone ? ` · ${esc(m.phone)}` : ''}</span></div>
+    <div>${m.status === 'pending' ? '<span class="status pending">Em análise</span>' : status(m.status)}</div>
+    <div class="hide-sm num">${String(m.feePercent).replace('.', ',')}% · mín. ${brl(m.feeMinCents)}</div>
+    <div class="amt">${brl(m.balance.available)}<small>${brl(m.balance.gross)} recebidos</small></div>
+    <div class="act">${m.status === 'pending'
+      ? `<button class="btn btn-sm btn-primary" data-m-approve="${m.id}">Aprovar</button><button class="btn btn-sm btn-danger" data-m-reject="${m.id}">Recusar</button>`
+      : `<button class="btn btn-sm" data-m-fee="${m.id}">Taxa</button><button class="btn btn-sm ${m.status === 'active' ? 'btn-danger' : ''}" data-m-toggle="${m.id}">${m.status === 'active' ? 'Bloquear' : 'Reativar'}</button>`}</div>
+  </div>`).join('') : '<div class="empty"><b>Nenhum lojista</b>Os cadastros novos aparecem aqui para aprovação.</div>';
+};
+$('#mStatus').addEventListener('click', (e) => { const b = e.target.closest('[data-s]'); if (!b) return; mStatus = b.dataset.s; $$('#mStatus button').forEach((x) => x.classList.toggle('on', x === b)); LOADERS['admin-merchants'](); });
+$('#mList').addEventListener('click', async (e) => {
+  const find = (a) => { const b = e.target.closest(`[${a}]`); return b && merchants.find((m) => m.id === Number(b.getAttribute(a))); };
+  let m;
+  try {
+    if ((m = find('data-m-approve'))) { await api(`/api/admin/merchants/${m.id}`, { method: 'PATCH', body: { status: 'active' } }); toast(`${m.name} aprovado.`); }
+    else if ((m = find('data-m-reject'))) {
+      const ok = await confirmModal({ title: 'Recusar cadastro', text: `O cadastro de ${esc(m.name)} será apagado.`, okText: 'Recusar', danger: true });
+      if (!ok) return; ok.done();
+      await api(`/api/admin/merchants/${m.id}`, { method: 'DELETE' }); toast('Cadastro recusado.');
+    } else if ((m = find('data-m-toggle'))) {
+      await api(`/api/admin/merchants/${m.id}`, { method: 'PATCH', body: { status: m.status === 'active' ? 'blocked' : 'active' } });
+      toast(m.status === 'active' ? 'Lojista bloqueado.' : 'Lojista reativado.');
+    } else if ((m = find('data-m-fee'))) {
+      openModal({
+        title: `Taxa de ${m.name}`,
+        body: `<div class="two"><div class="field"><label for="fPct">Percentual (%)</label><input class="input num" id="fPct" inputmode="decimal" value="${String(m.feePercent).replace('.', ',')}" /></div>
+          <div class="field"><label for="fMin">Mínimo por PIX</label><div class="input-money"><span>R$</span><input class="input num" id="fMin" inputmode="numeric" value="${(m.feeMinCents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}" /></div></div></div><div class="alert" id="fMsg"></div>`,
+        foot: '<button class="btn" id="fNo">Cancelar</button><button class="btn btn-primary" id="fOk">Salvar</button>',
+      });
+      moneyMask($('#fMin'));
+      $('#fNo').onclick = closeModal;
+      $('#fOk').onclick = async () => {
+        try {
+          await api(`/api/admin/merchants/${m.id}`, { method: 'PATCH', body: { feePercent: Number($('#fPct').value.replace(',', '.')), feeMinCents: toCents($('#fMin').value) || 0 } });
+          closeModal(); toast('Taxa atualizada.'); LOADERS['admin-merchants']();
+        } catch (err) { alertBox($('#fMsg'), err.message); }
+      };
+      return;
+    } else return;
+    LOADERS['admin-merchants']();
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+let acStatus = '';
+LOADERS['admin-charges'] = async () => {
+  const { charges } = await api(`/api/admin/charges?status=${acStatus}`);
+  $('#acList').innerHTML = charges.length ? charges.map((c) => `<div class="row cols-charge-admin">
+    <div class="t"><strong>${esc(c.description || 'Cobrança PIX')}</strong><span>${dt(c.created_at)} · <span class="mono">${esc(c.id)}</span></span></div>
+    <div class="t hide-sm"><strong>${esc(c.merchant)}</strong><span>taxa ${brl(c.fee)}</span></div>
+    <div class="amt" style="order:3">${brl(c.amount)}</div>
+    <div style="order:2">${status(c.status)}</div>
+    <div class="act" style="order:4">${c.status === 'paid' ? `<button class="btn btn-sm btn-danger" data-refund="${esc(c.id)}">Devolver</button>` : ''}</div></div>`).join('')
+    : '<div class="empty"><b>Nenhuma cobrança</b></div>';
+};
+$('#acStatus').addEventListener('click', (e) => { const b = e.target.closest('[data-s]'); if (!b) return; acStatus = b.dataset.s; $$('#acStatus button').forEach((x) => x.classList.toggle('on', x === b)); LOADERS['admin-charges'](); });
+$('#acList').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-refund]');
+  if (!b) return;
+  const ok = await confirmModal({ title: 'Devolver pagamento', text: 'O valor volta para quem pagou e sai do saldo do lojista. Não dá para desfazer.', okText: 'Devolver', danger: true });
+  if (!ok) return;
+  busy(ok.btn, true);
+  try { await api(`/api/admin/charges/${b.dataset.refund}/refund`, { method: 'POST' }); ok.done(); toast('Pagamento devolvido.'); LOADERS['admin-charges'](); } catch (err) { ok.fail(err.message); busy(ok.btn, false); }
+});
+
+let awStatus = 'pending', wds = [];
+LOADERS['admin-withdrawals'] = async () => {
+  wds = (await api('/api/admin/withdrawals')).withdrawals;
+  setBadge('admin-withdrawals', wds.filter((w) => w.status === 'pending').length);
+  const list = wds.filter((w) => !awStatus || w.status === awStatus);
+  $('#awList').innerHTML = list.length ? list.map((w) => `<div class="row cols-wd-admin">
+    <div class="t"><strong>${esc(w.merchant)}</strong><span>Saque #${w.id} · ${dt(w.createdAt)}</span></div>
+    <div class="t hide-sm"><strong class="mono">${esc(w.pixKey)}</strong><span>${w.note ? esc(w.note) : ''}</span></div>
+    <div class="amt">${brl(w.amount)}</div>
+    <div>${status(w.status)}</div>
+    <div class="act">${w.status === 'pending' ? `<button class="btn btn-sm" data-wcopy="${esc(w.pixKey)}">Copiar chave</button><button class="btn btn-sm btn-primary" data-wpaid="${w.id}">Marcar pago</button><button class="btn btn-sm btn-danger" data-wreject="${w.id}">Recusar</button>` : ''}</div></div>`).join('')
+    : '<div class="empty"><b>Nenhum saque aqui</b></div>';
+};
+$('#awStatus').addEventListener('click', (e) => { const b = e.target.closest('[data-s]'); if (!b) return; awStatus = b.dataset.s; $$('#awStatus button').forEach((x) => x.classList.toggle('on', x === b)); LOADERS['admin-withdrawals'](); });
+$('#awList').addEventListener('click', async (e) => {
+  const c = e.target.closest('[data-wcopy]');
+  if (c) { copy(c.dataset.wcopy, 'Chave PIX copiada'); return; }
+  const p = e.target.closest('[data-wpaid]'), r = e.target.closest('[data-wreject]');
+  if (!p && !r) return;
+  const w = wds.find((x) => x.id === Number((p || r).getAttribute(p ? 'data-wpaid' : 'data-wreject')));
+  const ok = await confirmModal(p
+    ? { title: `Confirmar saque de ${brl(w.amount)}`, text: `Confirme que você já fez o PIX de ${brl(w.amount)} para a chave <b class="mono">${esc(w.pixKey)}</b>.`, okText: 'Marcar como pago', input: { label: 'Comprovante / ID da transação (opcional)', placeholder: 'E2E…' } }
+    : { title: 'Recusar saque', text: 'O valor volta para o saldo do lojista.', okText: 'Recusar saque', danger: true, input: { label: 'Motivo (o lojista verá)', placeholder: 'Chave PIX inválida' } });
+  if (!ok) return;
+  try { await api(`/api/admin/withdrawals/${w.id}/${p ? 'paid' : 'reject'}`, { method: 'POST', body: { note: ok.value } }); ok.done(); toast(p ? 'Saque marcado como pago.' : 'Saque recusado.'); LOADERS['admin-withdrawals'](); } catch (err) { ok.fail(err.message); }
+});
+
+// ------------------------------------------------------------------ início
+function paintWho() {
+  const u = state.me;
+  $('#whoName').textContent = u.name;
+  $('#whoRole').textContent = u.role === 'admin' ? 'Administrador' : u.email;
+  $('#av').textContent = (u.name || '?')[0].toUpperCase();
+}
+
+(async () => {
+  $$('[data-logo]').forEach((el) => { el.innerHTML = `${LOGO}Zyropay`; });
+  try {
+    const r = await api('/api/me');
+    Object.assign(state, { me: r.user, mock: r.mock, limits: r.limits });
+  } catch { location.href = '/entrar'; return; }
+  $('#mockBanner').classList.toggle('hidden', !state.mock);
+  paintWho();
+  renderNav();
+  go(location.hash.slice(1) || MENUS[state.me.role][0][0]);
+  if (state.me.role === 'admin') api('/api/admin/overview').then((o) => { setBadge('admin-merchants', o.merchants.pending); setBadge('admin-withdrawals', o.pendingWithdrawals); }).catch(() => {});
+})();
+addEventListener('unhandledrejection', (e) => { if (e.reason?.status === 401) location.href = '/entrar'; });

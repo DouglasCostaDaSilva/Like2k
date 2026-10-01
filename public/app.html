@@ -3,258 +3,177 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Painel — LikeSystem</title>
-  <meta name="theme-color" content="#040406" />
+  <title>Painel · Zyropay</title>
+  <meta name="theme-color" content="#08080b" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/zyro.css" />
   <link rel="stylesheet" href="/css/app.css" />
-  <script type="importmap">
-    { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
-  </script>
 </head>
 <body>
-  <canvas id="stage" aria-hidden="true"></canvas>
-  <div class="app-shade"></div>
-  <div class="grain"></div>
-  <div class="scanlines"></div>
-
   <div class="shell">
-    <aside class="side glass" id="side">
-      <a href="/" class="logo">
-        <svg viewBox="0 0 64 64" fill="none"><path d="M32 32c0-2 2-3 3.5-2.5 3 1 3 5.5 0 7.5-4.5 3-10.5-.5-10.5-6 0-7.5 8.5-12 15.5-9 9 4 10 17 2 23-10 7.5-24 1-24-12C18.5 17 33 9 45.5 15" stroke="#ff6a0d" stroke-width="5" stroke-linecap="round"/></svg>
-        <span>LIKE<b>SYSTEM</b></span>
-      </a>
-      <div class="me"><div class="avatar" id="avatar">?</div><div><strong id="meName">…</strong><span id="meRole"></span></div></div>
-      <nav class="menu" id="menu"></nav>
-      <div class="side-foot">
-        <button class="btn btn-sm" id="logout">Sair</button>
-      </div>
+    <aside class="sidebar" id="sidebar">
+      <a href="/" class="brand" data-logo>Zyropay</a>
+      <nav class="nav" id="nav"></nav>
+      <div class="who"><span class="av" id="av">?</span><div><strong id="whoName">…</strong><span id="whoRole"></span></div>
+        <button class="x" id="logout" title="Sair" aria-label="Sair"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 17l5-5-5-5M20 12H9M12 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"/></svg></button></div>
     </aside>
 
     <main class="main">
-      <div class="mobile-bar glass">
-        <span class="logo"><span>LIKE<b>SYSTEM</b></span></span>
-        <button class="btn btn-sm" id="menuToggle" aria-label="Abrir menu">Menu</button>
-      </div>
-      <div class="banner hidden" id="mockBanner">Modo de teste (MOCK_API=1): os envios são simulados e nenhum like real é enviado.</div>
+      <div class="mobilebar"><span class="brand" data-logo>Zyropay</span><button class="btn btn-sm" id="menuBtn" aria-label="Abrir menu">Menu</button></div>
+      <div class="banner hidden" id="mockBanner">Modo de teste: o provedor PIX é simulado. Use “Simular pagamento” para testar o fluxo completo.</div>
 
-      <!-- ============ CLIENTE: PAINEL ============ -->
-      <section class="view" data-view="dashboard">
-        <div class="top"><div><h1>Olá, <span class="grad" id="helloName"></span></h1><p>Bem-vindo ao seu painel. <span class="pill active" id="kStatus">Ativo</span></p></div>
-          <button class="btn btn-primary" data-go="send">Enviar likes</button></div>
-        <div class="banner warn hidden" id="lowStock"></div>
-        <div class="grid cards">
-          <div class="card glass kpi"><div class="label">Limite total</div><div class="value" id="kLimit">—</div><div class="hint">tudo que já entrou no seu estoque</div></div>
-          <div class="card glass kpi"><div class="label">Usado total</div><div class="value" id="kUsed">—</div><div class="hint" id="kCount"></div></div>
-          <div class="card glass kpi hot"><div class="label">Restantes</div><div class="value" id="kStock">—</div><div class="hint">likes disponíveis para enviar</div></div>
-          <div class="card glass kpi"><div class="label">Expira em</div><div class="value" id="kExpiry">—</div><div class="hint" id="kExpiryHint">validade do seu acesso</div></div>
-        </div>
-        <div class="card glass" style="margin-top:16px">
-          <div class="card-head"><div><h3>Progresso do estoque</h3><p class="sub" id="kProgressText"></p></div><strong class="grad mono" id="kProgressPct">0%</strong></div>
-          <div class="meter big"><i id="kProgress" style="width:0"></i></div>
-          <div class="progress-foot"><span><i class="dot"></i>Estoque global <b class="mono" id="kGlobal">—</b></span><span>Enviados hoje <b class="mono" id="kToday">—</b></span><span>Auto Likes ativos <b class="mono" id="kAuto">—</b></span></div>
-        </div>
-        <div class="card glass" style="margin-top:16px">
-          <div class="card-head"><div><h3>Últimos envios</h3><p class="sub">Seus 8 envios mais recentes</p></div><button class="btn btn-sm" data-go="history">Ver tudo</button></div>
-          <div class="list" id="recentSends"></div>
-        </div>
-      </section>
-
-      <!-- ============ ADMIN: VISÃO GERAL ============ -->
-      <section class="view" data-view="overview">
-        <div class="top"><div><h1>Visão <span class="grad">geral</span></h1><p>Estoque global da API, estoques dos clientes e movimento do dia.</p></div>
-          <button class="btn" id="refreshOverview">Atualizar saldo da API</button></div>
-        <div class="grid cards">
-          <div class="card glass kpi hot"><div class="label"><i class="dot" id="oDot"></i>Estoque global (API)</div><div class="value" id="oRemaining">—</div><div class="hint" id="oPlan">—</div><div class="meter"><i id="oMeter" style="width:0"></i></div></div>
-          <div class="card glass kpi"><div class="label">Alocado aos clientes</div><div class="value" id="oAllocated">—</div><div class="hint">soma dos estoques individuais</div></div>
-          <div class="card glass kpi"><div class="label">Livre para vender</div><div class="value" id="oFree">—</div><div class="hint">global − alocado</div></div>
-          <div class="card glass kpi"><div class="label">Likes hoje</div><div class="value" id="oToday">—</div><div class="hint" id="oTodayHint"></div></div>
-          <div class="card glass kpi"><div class="label">Faturamento</div><div class="value" id="oRevenue">—</div><div class="hint">pedidos pagos</div></div>
-          <div class="card glass kpi"><div class="label">Clientes</div><div class="value" id="oClients">—</div><div class="hint" id="oClientsHint"></div></div>
-        </div>
-        <div class="grid two" style="margin-top:16px">
-          <div class="card glass"><div class="card-head"><div><h3>Pedidos aguardando</h3><p class="sub">Confirme o PIX para liberar o estoque</p></div><button class="btn btn-sm" data-go="orders">Abrir</button></div><div class="table-wrap" id="oOrders"></div></div>
-          <div class="card glass"><div class="card-head"><div><h3>Solicitações de acesso</h3><p class="sub">Ninguém entra sem sua aprovação</p></div><button class="btn btn-sm" data-go="requests">Abrir</button></div><div class="table-wrap" id="oRequests"></div></div>
-        </div>
-      </section>
-
-      <!-- ============ ENVIAR LIKES ============ -->
-      <section class="view" data-view="send">
-        <div class="top"><div><h1>Enviar <span class="grad">likes</span></h1><p>Informe o ID do jogador e a quantidade. Até 2.000 likes por dia em cada ID.</p></div></div>
-        <div class="grid two">
-          <form class="card glass form" id="sendForm" autocomplete="off">
-            <div class="field">
-              <label for="sId">ID do jogador</label>
-              <div class="row"><input class="input mono" id="sId" inputmode="numeric" placeholder="Ex.: 123456789" required maxlength="15" /><button type="button" class="btn" id="sCheck">Verificar</button></div>
-            </div>
-            <div class="player" id="sPlayer"></div>
-            <div class="field">
-              <label for="sAmount">Quantidade de likes</label>
-              <input class="input mono" id="sAmount" type="number" min="1" max="2000" step="1" value="2000" required />
-              <input type="range" id="sRange" min="1" max="2000" step="1" value="2000" aria-label="Quantidade" />
-              <div class="chips" id="sChips"></div>
-            </div>
-            <div class="summary" id="sSummary"></div>
-            <div class="alert" id="sMsg"></div>
-            <button class="btn btn-primary btn-block" type="submit" id="sBtn">Enviar likes</button>
-          </form>
-          <div class="card glass">
-            <div class="card-head"><div><h3>Envios recentes</h3><p class="sub">Atualizado a cada envio</p></div></div>
-            <div class="table-wrap" id="sRecent"></div>
+      <!-- ===================== LOJISTA: INÍCIO ===================== -->
+      <section class="view" data-view="home">
+        <div class="topbar"><div><h1 id="hello">Olá</h1><p>Resumo dos seus recebimentos.</p></div></div>
+        <div class="grid">
+          <div class="card balance">
+            <div><div class="label">Saldo disponível</div><div class="big" id="hBalance">R$ 0,00</div><div class="sub" id="hBalanceSub"></div></div>
+            <div class="actions" style="display:flex;gap:10px"><button class="btn btn-primary" data-new-charge>Nova cobrança</button><button class="btn" data-go="withdrawals">Sacar</button></div>
+          </div>
+          <div class="grid kpis">
+            <div class="card kpi"><div class="label">Recebido hoje</div><div class="value" id="hToday">—</div><div class="sub" id="hTodayCount"></div></div>
+            <div class="card kpi"><div class="label">Total recebido</div><div class="value" id="hGross">—</div><div class="sub">desde o início</div></div>
+            <div class="card kpi"><div class="label">Conversão</div><div class="value" id="hConv">—</div><div class="sub">cobranças pagas / finalizadas</div></div>
+            <div class="card kpi"><div class="label">Sua taxa</div><div class="value" id="hFee">—</div><div class="sub" id="hFeeMin"></div></div>
+          </div>
+          <div class="grid g-side">
+            <div class="card"><div class="card-head"><div><h3>Recebimentos nos últimos 14 dias</h3><p id="hChartSub"></p></div></div><div class="chart" id="hChart"></div></div>
+            <div class="card"><div class="card-head"><div><h3>Últimas cobranças</h3></div><button class="btn btn-sm" data-go="charges">Ver todas</button></div><div class="list" id="hRecent"></div></div>
           </div>
         </div>
       </section>
 
-      <!-- ============ COMPRAR ESTOQUE ============ -->
-      <section class="view" data-view="buy">
-        <div class="top"><div><h1>Comprar <span class="grad">estoque</span></h1><p>R$ 8,80 a cada 2.000 likes · mínimo de 20.000 likes no estoque individual.</p></div></div>
-        <div class="grid two">
-          <form class="card glass form" id="buyForm">
-            <div class="field">
-              <label for="bLikes">Quantidade de likes</label>
-              <input class="input mono" id="bLikes" type="number" min="20000" step="2000" value="20000" required />
-              <input type="range" id="bRange" min="20000" max="400000" step="2000" value="20000" aria-label="Quantidade" />
-              <div class="chips" id="bChips"></div>
-            </div>
-            <div class="summary" id="bSummary"></div>
-            <div class="alert" id="bMsg"></div>
-            <button class="btn btn-primary btn-block" type="submit">Gerar pedido</button>
-            <div class="pix hidden" id="bPix"></div>
-          </form>
-          <div class="card glass">
-            <div class="card-head"><div><h3>Meus pedidos</h3><p class="sub">O estoque é liberado quando o admin confirma o pagamento</p></div></div>
-            <div class="table-wrap" id="bOrders"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============ AUTO LIKES ============ -->
-      <section class="view" data-view="auto">
-        <div class="top"><div><h1>Auto <span class="grad">Likes</span></h1><p>Configure envios automáticos diários por um período. O envio sai todo dia no horário escolhido (horário de Brasília).</p></div></div>
-        <div class="grid two side-form">
-          <form class="card glass form" id="autoForm" autocomplete="off">
-            <h3>Novo agendamento</h3>
-            <div class="field"><label for="aId">ID do alvo</label><input class="input mono" id="aId" inputmode="numeric" placeholder="Ex.: 4463008763" required maxlength="15" /></div>
-            <div class="field"><label for="aQty">Quantidade por dia</label><input class="input mono" id="aQty" type="number" min="1" max="2000" placeholder="1–2000" required /></div>
-            <div class="field"><label for="aDays">Duração (dias)</label><input class="input mono" id="aDays" type="number" min="1" max="30" value="7" required /></div>
-            <div class="field"><label>Horário do envio</label>
-              <div class="row"><input class="input mono" id="aHour" type="number" min="0" max="23" value="12" aria-label="Hora" required /><input class="input mono" id="aMin" type="number" min="0" max="59" value="0" aria-label="Minuto" required /></div>
-            </div>
-            <div class="summary" id="aSummary"></div>
-            <div class="alert" id="aMsg"></div>
-            <button class="btn btn-primary btn-block" type="submit">Criar agendamento diário</button>
-          </form>
-          <div class="card glass">
-            <div class="card-head"><div><h3>Meus agendamentos</h3><p class="sub">Enquanto um Auto Likes estiver ativo, o ID não recebe envios manuais</p></div></div>
-            <div id="aList" class="list"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============ HISTÓRICO ============ -->
-      <section class="view" data-view="history">
-        <div class="top"><div><h1>Histórico de <span class="grad">envios</span></h1><p>Envios manuais, automáticos e pela API.</p></div></div>
-        <div class="card glass">
+      <!-- ===================== LOJISTA: COBRANÇAS ===================== -->
+      <section class="view" data-view="charges">
+        <div class="topbar"><div><h1>Cobranças</h1><p id="cSub">Todas as cobranças PIX que você criou.</p></div><div class="actions"><button class="btn btn-primary" data-new-charge>Nova cobrança</button></div></div>
+        <div class="card">
           <div class="filters">
-            <div class="chips" id="hSource">
-              <button class="chip on" data-src="">Todos</button><button class="chip" data-src="manual">Manual</button><button class="chip" data-src="auto">Agendado</button><button class="chip" data-src="api">API</button>
-            </div>
-            <select class="input" id="hDays" aria-label="Período">
-              <option value="1">Últimas 24 horas</option><option value="7" selected>Últimos 7 dias</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option>
-            </select>
+            <div class="seg" id="cStatus"><button class="on" data-s="">Todas</button><button data-s="paid">Pagas</button><button data-s="pending">Aguardando</button><button data-s="expired">Expiradas</button><button data-s="canceled">Canceladas</button></div>
+            <div class="right"><input class="input" id="cSearch" placeholder="Buscar descrição, ID, pagador…" /><select class="input" id="cDays"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="90">90 dias</option><option value="365">12 meses</option></select></div>
           </div>
-          <p class="sub" id="hCount" style="margin:14px 0 6px"></p>
-          <div id="hList" class="list"></div>
+          <div class="row head cols-charge"><span>Cobrança</span><span class="hide-sm">Pagador</span><span>Status</span><span style="text-align:right">Valor</span></div>
+          <div class="list" id="cList"></div>
         </div>
       </section>
 
-      <!-- ============ API ============ -->
-      <section class="view" data-view="api">
-        <div class="top"><div><h1>API <span class="grad">REST</span></h1><p>Integre o envio de likes nas suas aplicações. Todos os endpoints retornam JSON e usam sua API Key.</p></div></div>
-        <div class="grid two">
-          <div class="card glass form">
-            <h3>Sua API Key</h3>
-            <p class="sub">Envie no header <code>X-Api-Key</code> de cada requisição. Não compartilhe: ela identifica tudo que for feito em seu nome.</p>
-            <div class="keybox"><code id="kApiKey">—</code></div>
-            <div class="row wrap"><button class="btn btn-sm" type="button" id="kCopy">Copiar</button><button class="btn btn-sm" type="button" id="kShow">Mostrar</button><button class="btn btn-sm btn-danger" type="button" id="kNew">Gerar nova chave</button></div>
-            <div class="summary">
-              <div><span class="muted">Base URL</span><b class="mono" id="kBase"></b></div>
-              <div><span class="muted">Formato</span><b>application/json</b></div>
-              <div><span class="muted">Limite</span><b>60 requisições por minuto</b></div>
-            </div>
+      <!-- ===================== LOJISTA: SAQUES ===================== -->
+      <section class="view" data-view="withdrawals">
+        <div class="topbar"><div><h1>Saques</h1><p>Transfira seu saldo para qualquer chave PIX. Saques são analisados e pagos em até 1 dia útil.</p></div></div>
+        <div class="grid g-side">
+          <div class="card">
+            <div class="card-head"><h3>Histórico de saques</h3></div>
+            <div class="row head cols-wd"><span>Destino</span><span class="hide-sm">Pedido em</span><span>Status</span><span style="text-align:right">Valor</span></div>
+            <div class="list" id="wList"></div>
           </div>
-          <div class="card glass docs">
-            <h3>Endpoints</h3>
-            <div class="ep"><span class="m post">POST</span><code>/api/v1/likes/send</code><p>Envia likes para um UID. Corpo: <code>target_id</code> (texto) e <code>amount</code> (1–2000). Debita do seu estoque.</p></div>
-            <div class="ep"><span class="m get">GET</span><code>/api/v1/balance</code><p>Saldo: <code>remaining</code>, <code>stock_limit</code>, <code>stock_used</code>, <code>used_today</code>, <code>expiry_date</code>.</p></div>
-            <div class="ep"><span class="m get">GET</span><code>/api/v1/logs?limit=50&amp;days=14</code><p>Histórico de envios (até 100 registros, até 30 dias).</p></div>
-            <div class="ep"><span class="m get">GET</span><code>/api/v1/player/{uid}</code><p>Dados do jogador: nickname, região, likes do perfil.</p></div>
-            <h3 style="margin-top:14px">Exemplo</h3>
-            <pre class="code" id="kExample"></pre>
-            <p class="sub">Erros: 400 parâmetros inválidos ou estoque insuficiente · 401 chave ausente ou inválida · 403 conta desativada ou expirada · 500 falha na API do Free Fire. Todos retornam <code>{"error": "mensagem"}</code>.</p>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============ ADMIN: CLIENTES ============ -->
-      <section class="view" data-view="clients">
-        <div class="top"><div><h1><span class="grad">Clientes</span></h1><p>Crie acessos, ajuste estoques individuais e bloqueie contas.</p></div></div>
-        <div class="grid two side-form">
-          <form class="card glass form" id="cForm" autocomplete="off">
-            <h3>Novo cliente</h3>
-            <div class="field"><label for="cUser">Usuário</label><input class="input" id="cUser" required minlength="3" maxlength="24" /></div>
-            <div class="field"><label for="cPass">Senha</label><input class="input" id="cPass" required minlength="6" /></div>
-            <div class="field"><label for="cStock">Estoque inicial (likes)</label><input class="input mono" id="cStock" type="number" min="0" step="2000" value="0" /></div>
-            <div class="field"><label for="cContact">Contato</label><input class="input" id="cContact" placeholder="WhatsApp / Discord" /></div>
-            <div class="alert" id="cMsg"></div>
-            <button class="btn btn-primary" type="submit">Criar acesso</button>
+          <form class="card card-pad form" id="wForm">
+            <h3 style="font-size:17px">Novo saque</h3>
+            <div class="kv"><div><span>Disponível para saque</span><b id="wAvail">—</b></div><div><span>Em análise</span><b id="wPending">—</b></div></div>
+            <div class="field"><label for="wAmount">Valor</label><div class="input-money"><span>R$</span><input class="input num" id="wAmount" inputmode="numeric" placeholder="0,00" required /></div><span class="hint">Mínimo de R$ 10,00. <button type="button" class="btn-ghost" id="wAll" style="border:0;background:none;color:var(--accent-2);font-weight:700;cursor:pointer;padding:0">Sacar tudo</button></span></div>
+            <div class="field"><label for="wKey">Chave PIX de destino</label><input class="input" id="wKey" placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória" required /></div>
+            <div class="alert" id="wMsg"></div>
+            <button class="btn btn-primary btn-block" type="submit">Solicitar saque</button>
           </form>
-          <div class="card glass">
-            <div class="card-head"><div><h3>Base de clientes</h3><p class="sub" id="cCount"></p></div><input class="input" id="cSearch" placeholder="Buscar…" style="height:38px;max-width:200px" /></div>
-            <div class="table-wrap" id="cTable"></div>
-          </div>
         </div>
       </section>
 
-      <!-- ============ ADMIN: SOLICITAÇÕES ============ -->
-      <section class="view" data-view="requests">
-        <div class="top"><div><h1>Solicitações de <span class="grad">acesso</span></h1><p>Plataforma fechada: aprove somente quem você conhece.</p></div></div>
-        <div class="card glass"><div class="table-wrap" id="rTable"></div></div>
+      <!-- ===================== LOJISTA: INTEGRAÇÃO ===================== -->
+      <section class="view" data-view="integration">
+        <div class="topbar"><div><h1>Integração</h1><p>Chave da API, webhooks e o que o seu sistema precisa para cobrar automaticamente.</p></div><div class="actions"><a class="btn" href="/docs" target="_blank" rel="noopener">Documentação da API</a></div></div>
+        <div class="grid g-2">
+          <div class="card card-pad form">
+            <div><h3 style="font-size:17px">Chave da API</h3><p class="muted" style="font-size:14px;margin-top:4px">Use no header <span class="mono">Authorization: Bearer …</span>. Por segurança, a chave completa só aparece uma vez, quando é gerada.</p></div>
+            <div class="secret"><code id="iKey">Nenhuma chave gerada</code><button class="btn btn-sm hidden" id="iKeyCopy" type="button">Copiar</button></div>
+            <div class="alert info" id="iKeyNote"></div>
+            <div><button class="btn" id="iKeyNew" type="button">Gerar chave</button></div>
+          </div>
+          <form class="card card-pad form" id="hookForm">
+            <div><h3 style="font-size:17px">Webhook</h3><p class="muted" style="font-size:14px;margin-top:4px">Avisamos seu sistema por POST quando uma cobrança é criada, paga, expira ou é cancelada, e quando um saque muda de status.</p></div>
+            <div class="field"><label for="iUrl">URL que recebe os avisos</label><input class="input" id="iUrl" placeholder="https://seusite.com/webhooks/zyropay" /></div>
+            <div class="field"><label>Segredo de assinatura</label><div class="secret"><code id="iSecret">whsec_••••••••••••••••</code><button class="btn btn-sm" id="iSecretShow" type="button">Mostrar</button></div><span class="hint">Valide o header <span class="mono">Zyropay-Signature</span> com este segredo.</span></div>
+            <div class="alert" id="iMsg"></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" type="submit">Salvar</button><button class="btn" type="button" id="iTest">Enviar teste</button><button class="btn btn-ghost" type="button" id="iRotate">Trocar segredo</button></div>
+          </form>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <div class="card-head"><div><h3>Entregas de webhook</h3><p>Últimas 50 tentativas. Falhas são reenviadas até 6 vezes.</p></div><button class="btn btn-sm" id="iReload">Atualizar</button></div>
+          <div class="row head cols-hook"><span>Evento</span><span class="hide-sm">Quando</span><span>Status</span><span style="text-align:right">Resposta</span></div>
+          <div class="list" id="iHooks"></div>
+        </div>
       </section>
 
-      <!-- ============ ADMIN: PEDIDOS ============ -->
-      <section class="view" data-view="orders">
-        <div class="top"><div><h1><span class="grad">Pedidos</span></h1><p>Aprove após confirmar o pagamento — o estoque individual do cliente é creditado na hora.</p></div></div>
-        <div class="card glass"><div class="table-wrap" id="ordTable"></div></div>
+      <!-- ===================== LOJISTA: CONTA ===================== -->
+      <section class="view" data-view="account">
+        <div class="topbar"><div><h1>Conta</h1><p>Seus dados, chave PIX padrão e senha.</p></div></div>
+        <div class="grid g-2">
+          <form class="card card-pad form" id="accForm">
+            <h3 style="font-size:17px">Dados</h3>
+            <div class="field"><label for="aName">Nome exibido no checkout</label><input class="input" id="aName" required /></div>
+            <div class="two"><div class="field"><label>E-mail</label><input class="input" id="aEmail" disabled /></div><div class="field"><label>CPF / CNPJ</label><input class="input mono" id="aDoc" disabled /></div></div>
+            <div class="two"><div class="field"><label for="aPhone">WhatsApp</label><input class="input" id="aPhone" /></div><div class="field"><label for="aPix">Chave PIX padrão para saques</label><input class="input" id="aPix" /></div></div>
+            <div class="alert" id="aMsg"></div>
+            <div><button class="btn btn-primary" type="submit">Salvar dados</button></div>
+          </form>
+          <form class="card card-pad form" id="pwForm">
+            <h3 style="font-size:17px">Senha</h3>
+            <div class="field"><label for="pCur">Senha atual</label><input class="input" id="pCur" type="password" autocomplete="current-password" required /></div>
+            <div class="field"><label for="pNew">Nova senha</label><input class="input" id="pNew" type="password" minlength="8" autocomplete="new-password" required /></div>
+            <div class="alert" id="pMsg"></div>
+            <div><button class="btn" type="submit">Trocar senha</button></div>
+            <div class="kv" style="margin-top:8px"><div><span>Taxa por PIX pago</span><b id="aFee">—</b></div><div><span>Mensalidade</span><b>R$ 0,00</b></div></div>
+          </form>
+        </div>
       </section>
 
-      <!-- ============ ADMIN: ENVIOS ============ -->
-      <section class="view" data-view="sends">
-        <div class="top"><div><h1><span class="grad">Envios</span></h1><p>Todos os envios da plataforma e os logs da API.</p></div>
-          <div class="chips"><button class="chip on" data-src="local">Plataforma</button><button class="chip" data-src="remote">Logs da API</button></div></div>
-        <div class="card glass"><div class="table-wrap" id="aSends"></div></div>
+      <!-- ===================== ADMIN: VISÃO GERAL ===================== -->
+      <section class="view" data-view="admin-home">
+        <div class="topbar"><div><h1>Visão geral</h1><p id="adSub">Movimento da plataforma.</p></div></div>
+        <div class="grid">
+          <div class="grid kpis">
+            <div class="card kpi"><div class="label">Volume processado</div><div class="value" id="adTpv">—</div><div class="sub">total de PIX pagos</div></div>
+            <div class="card kpi"><div class="label">Receita de taxas</div><div class="value" id="adRev">—</div><div class="sub" id="adRevToday"></div></div>
+            <div class="card kpi"><div class="label">Devido aos lojistas</div><div class="value" id="adOwed">—</div><div class="sub">saldo + saques em análise</div></div>
+            <div class="card kpi"><div class="label">Lojistas ativos</div><div class="value" id="adMerch">—</div><div class="sub" id="adMerchSub"></div></div>
+          </div>
+          <div class="card"><div class="card-head"><div><h3>Volume processado nos últimos 14 dias</h3><p id="adChartSub"></p></div></div><div class="chart" id="adChart"></div></div>
+        </div>
       </section>
 
-      <!-- ============ ADMIN: CONFIGURAÇÕES ============ -->
-      <section class="view" data-view="settings">
-        <div class="top"><div><h1><span class="grad">Configurações</span></h1><p>Dados de pagamento exibidos ao cliente quando ele gera um pedido.</p></div></div>
-        <form class="card glass form" id="setForm" style="max-width:640px">
-          <div class="field"><label for="stPix">Chave PIX</label><input class="input" id="stPix" /></div>
-          <div class="field"><label for="stHolder">Titular</label><input class="input" id="stHolder" /></div>
-          <div class="field"><label for="stContact">Contato para comprovantes</label><input class="input" id="stContact" placeholder="WhatsApp / Discord" /></div>
-          <div class="field"><label for="stNote">Instruções de pagamento</label><textarea class="input" id="stNote"></textarea></div>
-          <div class="alert" id="stMsg"></div>
-          <button class="btn btn-primary" type="submit">Salvar</button>
-        </form>
+      <!-- ===================== ADMIN: LOJISTAS ===================== -->
+      <section class="view" data-view="admin-merchants">
+        <div class="topbar"><div><h1>Lojistas</h1><p>Aprove cadastros, ajuste taxas e bloqueie contas.</p></div></div>
+        <div class="card">
+          <div class="filters"><div class="seg" id="mStatus"><button class="on" data-s="">Todos</button><button data-s="pending">Em análise</button><button data-s="active">Ativos</button><button data-s="blocked">Bloqueados</button></div></div>
+          <div class="row head cols-merch"><span>Lojista</span><span>Status</span><span class="hide-sm">Taxa</span><span style="text-align:right">Saldo</span><span></span></div>
+          <div class="list" id="mList"></div>
+        </div>
+      </section>
+
+      <!-- ===================== ADMIN: COBRANÇAS ===================== -->
+      <section class="view" data-view="admin-charges">
+        <div class="topbar"><div><h1>Cobranças</h1><p>Todas as cobranças da plataforma.</p></div></div>
+        <div class="card">
+          <div class="filters"><div class="seg" id="acStatus"><button class="on" data-s="">Todas</button><button data-s="paid">Pagas</button><button data-s="pending">Aguardando</button><button data-s="refunded">Devolvidas</button></div></div>
+          <div class="row head cols-charge-admin"><span>Cobrança</span><span class="hide-sm">Lojista</span><span>Status</span><span style="text-align:right">Valor</span><span></span></div>
+          <div class="list" id="acList"></div>
+        </div>
+      </section>
+
+      <!-- ===================== ADMIN: SAQUES ===================== -->
+      <section class="view" data-view="admin-withdrawals">
+        <div class="topbar"><div><h1>Saques</h1><p>Faça o PIX para a chave do lojista no seu banco e marque como pago.</p></div></div>
+        <div class="card">
+          <div class="filters"><div class="seg" id="awStatus"><button data-s="">Todos</button><button class="on" data-s="pending">Em análise</button><button data-s="paid">Pagos</button><button data-s="rejected">Recusados</button></div></div>
+          <div class="row head cols-wd-admin"><span>Lojista</span><span class="hide-sm">Chave PIX</span><span style="text-align:right">Valor</span><span>Status</span><span></span></div>
+          <div class="list" id="awList"></div>
+        </div>
       </section>
     </main>
   </div>
 
-  <div class="modal" id="modal"><div class="box glass" role="dialog" aria-modal="true"><h3 id="mTitle"></h3><p id="mText"></p><div id="mBody"></div><div class="row"><button class="btn btn-sm" id="mCancel">Cancelar</button><button class="btn btn-primary btn-sm" id="mOk">Confirmar</button></div></div></div>
-  <div class="toasts" id="toasts"></div>
+  <div class="modal" id="modal" role="dialog" aria-modal="true"><div class="box"><div class="box-head"><h3 id="mTitle"></h3><button class="x" id="mClose" aria-label="Fechar">×</button></div><div class="box-body" id="mBody"></div><div class="box-foot" id="mFoot"></div></div></div>
 
   <script type="module" src="/js/app.js"></script>
 </body>

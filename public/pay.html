@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Pagamento PIX · Zyropay</title>
+  <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#08080b" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/zyro.css" />
+  <style>
+    body { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 32px 16px calc(32px + env(safe-area-inset-bottom, 0px)); background: radial-gradient(900px 500px at 50% -10%, rgba(139, 124, 255, 0.16), transparent), var(--bg); }
+    .pay { width: min(420px, 100%); }
+    .pay .card { overflow: hidden; }
+    .top { padding: 22px 24px 18px; border-bottom: 1px solid var(--line); }
+    .merchant { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; color: var(--text-2); font-weight: 600; }
+    .amount { font-family: var(--display); font-size: 40px; font-weight: 700; margin-top: 10px; letter-spacing: -0.03em; }
+    .desc { color: var(--muted); font-size: 14px; margin-top: 2px; }
+    .body { padding: 24px; display: grid; gap: 18px; }
+    .qr { width: 232px; height: 232px; margin: 0 auto; padding: 12px; border-radius: 16px; background: #fff; }
+    .qr img { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+    .steps { list-style: none; counter-reset: s; display: grid; gap: 8px; font-size: 14px; color: var(--text-2); }
+    .steps li { counter-increment: s; display: grid; grid-template-columns: 24px 1fr; gap: 8px; }
+    .steps li::before { content: counter(s); width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-2); font-size: 12px; font-weight: 800; }
+    .copy { display: grid; gap: 8px; }
+    .code { padding: 12px 14px; border-radius: var(--radius-sm); background: var(--bg); border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--text-2); word-break: break-all; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.55; }
+    .timer { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; color: var(--muted); }
+    .timer b { color: var(--text); font-variant-numeric: tabular-nums; }
+    .bar { height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; }
+    .bar i { display: block; height: 100%; background: var(--accent); transition: width 1s linear; }
+    .wait { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: var(--muted); }
+    .wait .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: 0.3; } }
+    .done { padding: 40px 24px; text-align: center; display: grid; gap: 10px; justify-items: center; }
+    .done svg { width: 76px; height: 76px; }
+    .done h2 { font-size: 24px; }
+    .done p { color: var(--text-2); font-size: 14px; }
+    .foot { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 18px; font-size: 12px; color: var(--muted); }
+    .foot svg { width: 14px; height: 14px; }
+    .sim { border-style: dashed; }
+  </style>
+</head>
+<body>
+  <div class="pay">
+    <div class="card" id="card">
+      <div class="body" style="text-align:center;padding:60px 24px"><i class="spinner" style="margin:0 auto"></i></div>
+    </div>
+    <div class="foot"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>Pagamento seguro via PIX · <span data-logo-text>Zyropay</span></div>
+  </div>
+
+  <script type="module">
+    import { api, brl, esc, copy } from '/js/common.js';
+    const id = location.pathname.split('/').pop();
+    const card = document.getElementById('card');
+    let data = null, timerId = null, pollId = null;
+
+    const icon = {
+      ok: '<svg viewBox="0 0 76 76" fill="none"><circle cx="38" cy="38" r="36" fill="#3ddc97" opacity=".14"/><circle cx="38" cy="38" r="26" fill="#3ddc97"/><path d="m27 39 7.5 7.5L50 31" stroke="#08080b" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      off: '<svg viewBox="0 0 76 76" fill="none"><circle cx="38" cy="38" r="36" fill="#7d7b8f" opacity=".14"/><circle cx="38" cy="38" r="26" fill="#2a2a35"/><path d="M38 27v13M38 48v1" stroke="#b4b2c3" stroke-width="5" stroke-linecap="round"/></svg>',
+    };
+
+    const header = (d) => `<div class="top"><div class="merchant"><span>${esc(d.merchant)}</span>${d.status === 'pending' ? '<span class="status pending">Aguardando pagamento</span>' : ''}</div>
+      <div class="amount num">${brl(d.amount)}</div>${d.description ? `<div class="desc">${esc(d.description)}</div>` : ''}</div>`;
+
+    function render() {
+      const d = data;
+      clearInterval(timerId);
+      if (d.status === 'paid') {
+        card.innerHTML = `${header(d)}<div class="done">${icon.ok}<h2>Pagamento confirmado</h2><p>${brl(d.amount)} pagos para ${esc(d.merchant)}${d.paidAt ? ` em ${new Date(d.paidAt).toLocaleString('pt-BR')}` : ''}.<br />Pode fechar esta página.</p></div>`;
+        clearInterval(pollId);
+        return;
+      }
+      if (d.status !== 'pending') {
+        const msg = { expired: ['Este PIX expirou', 'O prazo para pagar acabou. Peça um novo link a quem te cobrou.'], canceled: ['Cobrança cancelada', 'Quem te cobrou cancelou esta cobrança.'], refunded: ['Pagamento devolvido', 'O valor foi devolvido para a sua conta.'], failed: ['Pagamento não concluído', 'Peça um novo link a quem te cobrou.'] }[d.status] || ['Cobrança indisponível', ''];
+        card.innerHTML = `${header(d)}<div class="done">${icon.off}<h2>${msg[0]}</h2><p>${msg[1]}</p></div>`;
+        clearInterval(pollId);
+        return;
+      }
+      card.innerHTML = `${header(d)}<div class="body">
+        <div class="qr">${d.qrImage ? `<img src="${d.qrImage}" alt="QR Code PIX para pagar ${brl(d.amount)}" />` : ''}</div>
+        <div class="copy"><div class="code" id="code">${esc(d.copyPaste)}</div><button class="btn btn-primary btn-lg btn-block" id="copyBtn">Copiar código PIX</button></div>
+        <ol class="steps"><li>Abra o app do seu banco e escolha pagar com PIX</li><li>Escaneie o QR Code ou use o código copia e cola</li><li>Confirme o pagamento. Esta página atualiza sozinha.</li></ol>
+        <div><div class="timer">Expira em <b id="left">--:--</b></div><div class="bar" style="margin-top:8px"><i id="barFill"></i></div></div>
+        <div class="wait"><i class="dot"></i>Aguardando a confirmação do banco</div>
+        ${d.mock ? '<button class="btn btn-block sim" id="simBtn">Simular pagamento (modo de teste)</button>' : ''}
+      </div>`;
+      document.getElementById('copyBtn').onclick = async () => { await copy(d.copyPaste, 'Código PIX copiado'); document.getElementById('copyBtn').textContent = 'Código copiado ✓'; };
+      document.getElementById('simBtn')?.addEventListener('click', async () => { await api(`/api/public/charges/${id}/simulate`, { method: 'POST' }); load(); });
+      const total = Math.max(1, Date.parse(d.expiresAt) - Date.parse(d.createdAt));
+      const tick = () => {
+        const ms = Date.parse(d.expiresAt) - Date.now();
+        if (ms <= 0) { clearInterval(timerId); load(); return; }
+        const s = Math.floor(ms / 1000);
+        document.getElementById('left').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+        document.getElementById('barFill').style.width = `${Math.min(100, (ms / total) * 100)}%`;
+      };
+      tick();
+      timerId = setInterval(tick, 1000);
+    }
+
+    async function load() {
+      try {
+        const next = await api(`/api/public/charges/${encodeURIComponent(id)}`);
+        const changed = !data || next.status !== data.status;
+        data = next;
+        if (changed) render();
+      } catch (err) {
+        card.innerHTML = `<div class="done">${icon.off}<h2>Cobrança não encontrada</h2><p>Confira o link que você recebeu.</p></div>`;
+        clearInterval(pollId);
+      }
+    }
+    load();
+    pollId = setInterval(() => { if (!document.hidden) load(); }, 3000);
+  </script>
+</body>
+</html>

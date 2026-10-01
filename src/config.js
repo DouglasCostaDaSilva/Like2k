@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-// Carrega .env simples (KEY=VALUE) sem dependências externas.
+// .env simples (KEY=VALUE), sem dependências.
 const envPath = path.join(root, '.env');
 if (fs.existsSync(envPath)) {
   for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
@@ -16,31 +16,37 @@ if (fs.existsSync(envPath)) {
 }
 
 const env = process.env;
+const port = Number(env.PORT || 3000);
 
 export const config = {
-  port: Number(env.PORT || 3000),
-  apiBase: (env.LIKESYSTEM_API_URL || 'https://likesystem.squareweb.app').replace(/\/+$/, ''),
-  apiKey: env.LIKESYSTEM_API_KEY || '',
-  mock: env.MOCK_API === '1',
+  port,
+  publicUrl: (env.PUBLIC_URL || `http://localhost:${port}`).replace(/\/+$/, ''),
   dataDir: path.resolve(root, env.DATA_DIR || 'data'),
   secureCookies: env.SECURE_COOKIES === '1',
-  timezone: 'America/Sao_Paulo',
   sessionDays: 7,
+  timezone: 'America/Sao_Paulo',
 
-  // Regras de negócio
-  packSize: 2000, // likes por pacote
-  pricePerPackCents: 880, // R$ 8,80 por 2.000 likes
-  minPurchase: 20000, // compra mínima no estoque individual
-  maxPurchase: 2000000,
-  maxPerSend: 2000, // limite da API por requisição
-  dailyLimitPerUid: 2000, // envios de até 2k likes por dia para cada ID
-
-  admin: {
-    username: 'ADMIN',
-    password: env.ADMIN_PASSWORD || 'LELEO',
+  mp: {
+    accessToken: env.MP_ACCESS_TOKEN || '',
+    webhookSecret: env.MP_WEBHOOK_SECRET || '',
   },
+  mock: env.MOCK_PROVIDER === '1',
+
+  // Taxa padrão: 2% com mínimo de R$ 0,30 por PIX pago
+  feePercent: Number(env.FEE_PERCENT ?? 2),
+  feeMinCents: Number(env.FEE_MIN_CENTS ?? 30),
+
+  minChargeCents: 100, // R$ 1,00
+  maxChargeCents: 5_000_000, // R$ 50.000,00
+  minWithdrawalCents: 1000, // R$ 10,00
+  defaultExpiresMin: 30,
+
+  admin: { username: env.ADMIN_USER || 'ADMIN', password: env.ADMIN_PASSWORD || 'LELEO' },
 };
 
-export function priceCents(likes) {
-  return Math.round((likes / config.packSize) * config.pricePerPackCents);
+// taxa em centavos: percentual com mínimo, nunca maior que a própria cobrança
+export function feeFor(amountCents, merchant) {
+  const pct = merchant?.feePercent ?? config.feePercent;
+  const min = merchant?.feeMinCents ?? config.feeMinCents;
+  return Math.min(amountCents, Math.max(min, Math.round((amountCents * pct) / 100)));
 }

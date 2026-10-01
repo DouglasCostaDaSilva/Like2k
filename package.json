@@ -1,20 +1,18 @@
 {
-  "name": "likesystem",
+  "name": "zyropay",
   "version": "1.0.0",
-  "description": "LikeSystem — painel dark 3D para venda e envio de likes (Free Fire)",
+  "description": "Zyropay — gateway de pagamentos PIX (Mercado Pago)",
   "private": true,
   "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "mock": "MOCK_API=1 node server.js"
+    "mock": "MOCK_PROVIDER=1 node server.js"
   },
-  "engines": {
-    "node": ">=18.17"
-  },
+  "engines": { "node": ">=18.17" },
   "dependencies": {
     "express": "^5.2.1",
-    "three": "^0.186.1"
+    "qrcode": "^1.5.4"
   }
 }

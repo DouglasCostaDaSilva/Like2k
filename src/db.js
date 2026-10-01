@@ -3,24 +3,19 @@ import path from 'node:path';
 import { config } from './config.js';
 
 // Banco em arquivo JSON com escrita atômica (tmp + rename).
-// Suficiente para o volume de uma plataforma fechada; sem dependências nativas.
+// Toda mudança de saldo acontece de forma síncrona num único processo, então não há corrida.
+// Para volume alto, troque por Postgres mantendo as mesmas funções.
 
-const file = path.join(config.dataDir, 'db.json');
-const MAX_SENDS = 50000;
+const file = path.join(config.dataDir, 'zyropay.json');
 
 const defaults = () => ({
-  seq: { user: 0, order: 0, send: 0, schedule: 0 },
+  seq: { user: 0, charge: 0, withdrawal: 0, delivery: 0 },
   users: [],
   sessions: {},
-  orders: [],
-  sends: [],
-  schedules: [],
-  settings: {
-    pixKey: '',
-    pixHolder: '',
-    contact: '',
-    paymentNote: 'Após o pagamento via PIX, envie o comprovante ao administrador. O estoque é liberado assim que o pagamento for confirmado.',
-  },
+  charges: [],
+  withdrawals: [],
+  deliveries: [],
+  idempotency: {},
 });
 
 let data = defaults();
@@ -30,13 +25,13 @@ export function load() {
   if (fs.existsSync(file)) {
     const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
     const base = defaults();
-    data = { ...base, ...saved, seq: { ...base.seq, ...saved.seq }, settings: { ...base.settings, ...saved.settings } };
+    data = { ...base, ...saved, seq: { ...base.seq, ...saved.seq } };
   }
   return data;
 }
 
 export function save() {
-  if (data.sends.length > MAX_SENDS) data.sends.splice(0, data.sends.length - MAX_SENDS);
+  if (data.deliveries.length > 20000) data.deliveries.splice(0, data.deliveries.length - 20000);
   const tmp = `${file}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data));
   fs.renameSync(tmp, file);

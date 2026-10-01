@@ -1,65 +1,68 @@
-# LikeSystem
+# Zyropay
 
-Site dark em 3D para venda e envio de likes (Free Fire), com login fechado, estoque individual por cliente e estoque global da API.
+Gateway de pagamentos PIX. Lojistas se cadastram, geram cobranças pelo painel ou pela API, mandam um link de pagamento pronto e recebem aviso por webhook quando o PIX cai. O PIX é processado pelo **Mercado Pago**; o Zyropay controla saldo, taxa e saques de cada lojista.
 
-## Regras de negócio
+## Taxa
 
-| Regra | Valor |
-| --- | --- |
-| Preço | **R$ 8,80 a cada 2.000 likes** |
-| Compra mínima (estoque individual) | **20.000 likes** (múltiplos de 2.000) |
-| Envio | pede **ID do jogador + quantidade** (1 a 2.000 por envio) |
-| Limite diário | **até 2.000 likes por dia em cada ID** (fuso America/Sao_Paulo) |
-| Login admin | usuário **ADMIN**, senha **LELEO** |
+**2% por PIX pago, mínimo de R$ 0,30.** A taxa é descontada na hora em que a cobrança é paga (`net_amount = amount − fee`). Cobranças expiradas ou canceladas não pagam taxa. O admin pode definir percentual e mínimo diferentes por lojista.
 
-- **Plataforma fechada:** só entra quem o admin cria ou aprova. Quem pede acesso fica "pendente" e não consegue logar.
-- **Estoque individual:** saldo de likes de cada cliente. É debitado no envio e estornado automaticamente se a API falhar (ou se ela enviar menos que o pedido).
-- **Estoque global:** saldo real da conta na API (`/api/balance`). O admin vê global, alocado aos clientes e livre para vender; ao aprovar um pedido maior que o livre, o painel avisa.
-- **Pedidos:** o cliente gera o pedido e vê a chave PIX configurada pelo admin; o admin aprova após o pagamento e o estoque é creditado.
+## Como funciona
 
-## Funções do cliente
-
-- **Painel:** limite total, usado total, restantes, validade, progresso do estoque e aviso quando o estoque fica abaixo de 5.000.
-- **Enviar likes:** ID + quantidade (1–2.000), com conferência do nick antes.
-- **Auto Likes:** envio automático diário para um ID (quantidade por dia, duração em dias, horário de Brasília). Enquanto ativo, o ID não recebe envios manuais.
-- **Histórico:** filtros Todos / Manual / Agendado / API e período.
-- **API REST própria:** cada cliente gera sua chave e usa `/api/v1/likes/send`, `/api/v1/balance`, `/api/v1/logs` e `/api/v1/player/{uid}` com o header `X-Api-Key`, no mesmo formato da API original, debitando do estoque dele.
-- **Admin:** define a validade de cada cliente (depois dela, envios e API ficam bloqueados).
+1. **Cadastro:** o lojista cria conta com CPF/CNPJ (validado). A conta fica *em análise* até o admin aprovar.
+2. **Cobrança:** pelo painel ou `POST /v1/charges`. O Zyropay cria o pagamento PIX no Mercado Pago e devolve QR Code, copia e cola e `checkout_url`.
+3. **Pagamento:** o cliente paga pela página `/pay/{id}`, que atualiza sozinha. O Zyropay fica sabendo pelo webhook do Mercado Pago e, como garantia, consulta as cobranças pendentes a cada 15 s.
+4. **Aviso:** o sistema do lojista recebe `charge.paid` no webhook dele, assinado com HMAC-SHA256 (`Zyropay-Signature`), com até 6 tentativas.
+5. **Saque:** o lojista pede saque para a chave PIX dele; o admin faz o PIX e marca como pago (ou recusa, e o valor volta ao saldo).
 
 ## Rodando
 
 ```bash
 npm install
-cp .env.example .env      # coloque sua LIKESYSTEM_API_KEY
-npm start                 # http://localhost:3000
+cp .env.example .env    # preencha MP_ACCESS_TOKEN e PUBLIC_URL
+npm start               # http://localhost:3000
 ```
 
-Para testar sem gastar likes reais: `npm run mock` (simula a API).
+Teste sem Mercado Pago: `npm run mock`. Aparece o botão “Simular pagamento” no painel e no checkout.
 
-Requer Node 18.17+. Os dados ficam em `data/db.json` (usuários, sessões, pedidos, envios) — faça backup dessa pasta.
+Admin: usuário `ADMIN`, senha `LELEO` (mude com `ADMIN_USER` / `ADMIN_PASSWORD`).
 
-## Segurança
+## Configurando o Mercado Pago
 
-- A **API Key nunca vai para o navegador**: todas as chamadas à API passam pelo servidor.
-- Senhas com `scrypt` + salt; sessão em cookie `HttpOnly; SameSite=Strict`; rotas que alteram dados só aceitam JSON.
-- Bloqueio de 10 min após 5 tentativas de login erradas.
-- Em produção com HTTPS, use `SECURE_COOKIES=1`. Para trocar a senha do admin, defina `ADMIN_PASSWORD`.
+1. Em **Suas integrações › Credenciais de produção**, copie o *Access Token* para `MP_ACCESS_TOKEN`.
+2. `PUBLIC_URL` precisa ser o endereço **https** público do Zyropay (o Mercado Pago só notifica URLs https).
+3. Em **Webhooks**, cadastre `https://SEU-DOMINIO/webhooks/mercadopago`, evento *Pagamentos*, e copie a *assinatura secreta* para `MP_WEBHOOK_SECRET`.
+4. Em produção, use `SECURE_COOKIES=1`.
 
-## O traje 3D
+O dinheiro dos PIX cai na conta Mercado Pago dona do token. Os saques aos lojistas saem dessa conta (feitos pelo admin).
 
-A entrada tem um traje ninja laranja e preto (jaqueta com gola alta, zíper, espiral nas costas e no ombro, bandana com placa metálica e uma esfera de chakra) “vestido” por um shinobi invisível. Ele é **100% procedural** em Three.js — tecido com mapa de normal em sarja, sombreamento de cavidade nas dobras, barra que balança, sombras, bloom e partículas — e **gira/muda de posição conforme a rolagem, o mouse e a troca de telas no painel**.
+## API
 
-**Ultra realismo com modelo escaneado:** coloque um arquivo `public/models/outfit.glb` (ex.: um traje fotogramétrico/licenciado) e ele substitui o procedural automaticamente, mantendo todos os movimentos.
+Documentação completa em `/docs`. Resumo:
+
+| Método | Rota | O que faz |
+| --- | --- | --- |
+| POST | `/v1/charges` | Cria cobrança (`amount` em centavos, `Idempotency-Key` opcional) |
+| GET | `/v1/charges/{id}` | Consulta (aceita também o `external_id`) |
+| GET | `/v1/charges` | Lista |
+| POST | `/v1/charges/{id}/cancel` | Cancela pendente |
+| GET | `/v1/balance` | Saldo |
+
+Autenticação: `Authorization: Bearer zp_live_…` (a chave é guardada só como hash).
 
 ## Estrutura
 
 ```
-server.js            rotas (auth, envios, pedidos, admin)
-src/config.js        regras e variáveis de ambiente
-src/likeapi.js       cliente da API LikeSystem (+ modo simulado)
-src/auth.js          senhas, sessões, proteção de login
-src/db.js            banco JSON com escrita atômica
-public/index.html    landing 3D + login
-public/app.html      painel do cliente e do admin
-public/js/scene.js   cena 3D do traje
+server.js             rotas: autenticação, painel, API v1, webhooks, admin
+src/config.js         variáveis de ambiente e cálculo da taxa
+src/mercadopago.js    provedor PIX (Mercado Pago) + provedor simulado
+src/webhooks.js       envio assinado e reenvio dos avisos aos lojistas
+src/auth.js           senhas (scrypt), sessões, chaves de API
+src/db.js             banco em arquivo JSON (data/zyropay.json)
+public/               página inicial, entrar/cadastro, painel, checkout e docs
 ```
+
+## Antes de operar com dinheiro de terceiros
+
+- **Banco de dados:** o JSON em disco funciona para começar, mas para volume real migre para Postgres e faça backup diário.
+- **Regulação:** receber dinheiro em nome de outras empresas e repassar (subcredenciamento) é atividade regulada pelo Banco Central. Confirme com um contador ou advogado o enquadramento e os termos de uso do Mercado Pago para esse modelo.
+- **Contestação e golpes:** defina regras de análise de cadastro (KYC) e um prazo de retenção de saldo se o seu público tiver risco de fraude.
