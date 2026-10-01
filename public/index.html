@@ -3,724 +3,175 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Zyropay · API e checkout PIX para o seu Mercado Pago</title>
-  <meta name="description" content="Zyropay: API, checkout e painel para cobrar por PIX na sua conta Mercado Pago. Client ID e Client Secret, webhooks assinados. 2% por PIX pago, mínimo R$ 0,30, sem mensalidade." />
-  <meta name="theme-color" content="#08080b" />
-  <meta property="og:title" content="Zyropay · Gateway de pagamentos PIX" />
-  <meta property="og:description" content="Receba PIX na hora. API com credenciais em duas partes, webhooks assinados e checkout pronto. 2% por PIX pago." />
+  <title>Like2k — 2.000 likes no Free Fire</title>
+  <meta name="description" content="Like2k: 2.000 likes no seu perfil do Free Fire em minutos. Digite o ID, pague no PIX e receba automaticamente." />
+  <meta name="theme-color" content="#07070c" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/zyro.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/site.css" />
-  <style>
-    /* ---------- hero ---------- */
-    .hero { position: relative; padding: 88px 0 72px; overflow: hidden; }
-    .hero::before { content: ''; position: absolute; width: 820px; height: 820px; right: -260px; top: -300px; background: radial-gradient(closest-side, rgba(139, 124, 255, 0.24), transparent); pointer-events: none; }
-    .hero::after { content: ''; position: absolute; inset: 0; background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px); background-size: 28px 28px; mask-image: linear-gradient(180deg, #000, transparent 70%); -webkit-mask-image: linear-gradient(180deg, #000, transparent 70%); pointer-events: none; }
-    .hero .wrap { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 56px; align-items: center; position: relative; z-index: 1; }
-    .eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface); font-size: 13px; font-weight: 600; color: var(--text-2); }
-    .eyebrow i { width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 4px var(--good-soft); }
-    .hero h1 { font-size: clamp(40px, 5.6vw, 68px); margin: 22px 0 18px; font-weight: 700; }
-    .hero h1 em { font-style: normal; color: var(--accent-2); }
-    .hero .lead { font-size: 18px; color: var(--text-2); max-width: 540px; }
-    .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
-    .facts { display: flex; flex-wrap: wrap; gap: 14px 34px; margin-top: 40px; padding-top: 26px; border-top: 1px solid var(--line); }
-    .facts strong { display: block; font-family: var(--display); font-size: 22px; }
-    .facts span { font-size: 13px; color: var(--muted); }
-
-    .demo { position: relative; justify-self: center; width: min(390px, 100%); }
-    .demo .card { padding: 26px; box-shadow: 0 40px 100px -30px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(139, 124, 255, 0.08); }
-    .demo-top { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--muted); }
-    .demo-amount { font-family: var(--display); font-size: 38px; font-weight: 700; margin: 6px 0 2px; }
-    .demo-qr { position: relative; margin: 20px auto; width: 196px; height: 196px; border-radius: 14px; background: #fff; padding: 12px; }
-    .demo-qr canvas { width: 100%; height: 100%; image-rendering: pixelated; }
-    .demo-paid { position: absolute; inset: 0; border-radius: 14px; display: grid; place-items: center; background: rgba(17, 17, 22, 0.94); opacity: 0; transition: opacity 0.4s; }
-    .demo-paid svg { width: 64px; height: 64px; }
-    .demo.is-paid .demo-paid { opacity: 1; }
-    .demo-copy { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--bg); border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .demo-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; font-size: 13px; }
-    .notify { position: absolute; left: -64px; bottom: -28px; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--raised); border: 1px solid var(--line-2); box-shadow: 0 20px 50px -16px rgba(0, 0, 0, 0.9); font-size: 13px; opacity: 0; transform: translateY(8px); transition: opacity 0.35s, transform 0.35s; }
-    .notify b { display: block; font-size: 14px; }
-    .notify .ic { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: var(--good-soft); color: var(--good); font-weight: 800; }
-    .hook { position: absolute; right: -40px; top: 34px; padding: 10px 12px; border-radius: 12px; background: #0b0b10; border: 1px solid var(--line-2); font-family: var(--mono); font-size: 11px; line-height: 1.55; color: var(--text-2); box-shadow: 0 20px 50px -16px rgba(0, 0, 0, 0.9); opacity: 0; transform: translateY(8px); transition: opacity 0.35s 0.15s, transform 0.35s 0.15s; }
-    .hook b { color: var(--good); font-weight: 600; }
-    .demo.is-paid .notify, .demo.is-paid .hook { opacity: 1; transform: none; }
-
-    /* ---------- faixa de fatos ---------- */
-    .strip { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface); }
-    .strip .wrap { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
-    .strip .it { padding: 22px 18px; border-right: 1px solid var(--line); display: grid; gap: 2px; }
-    .strip .it:last-child { border-right: 0; }
-    .strip strong { font-family: var(--display); font-size: 20px; }
-    .strip span { font-size: 13px; color: var(--muted); }
-
-    /* ---------- recursos ---------- */
-    .grid-feat { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-    .feat { padding: 24px; transition: border-color 0.2s, transform 0.2s; }
-    .feat:hover { border-color: rgba(139, 124, 255, 0.5); transform: translateY(-3px); }
-    .feat .ico { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-2); margin-bottom: 16px; }
-    .feat .ico svg { width: 22px; height: 22px; }
-    .feat h3 { font-size: 17px; margin-bottom: 8px; font-family: var(--body); font-weight: 750; letter-spacing: 0; }
-    .feat p { color: var(--text-2); font-size: 14.5px; }
-    .feat.hl { border-color: rgba(139, 124, 255, 0.4); background: linear-gradient(180deg, rgba(139, 124, 255, 0.08), var(--surface)); }
-
-    /* ---------- como funciona ---------- */
-    .flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; margin-bottom: 40px; position: relative; }
-    .flow .node { text-align: center; padding: 0 8px; position: relative; }
-    .flow .node .ball { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 18px; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--line-2); color: var(--accent-2); position: relative; z-index: 1; }
-    .flow .node .ball svg { width: 28px; height: 28px; }
-    .flow .node:not(:last-child)::after { content: ''; position: absolute; top: 32px; left: calc(50% + 40px); right: calc(-50% + 40px); height: 0; border-top: 2px dashed var(--line-2); }
-    .flow .node b { display: block; font-size: 14px; margin-bottom: 2px; }
-    .flow .node span { font-size: 13px; color: var(--muted); }
-    .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-    .step { padding: 26px; }
-    .step .n { font-family: var(--mono); font-size: 13px; color: var(--accent-2); }
-    .step h3 { font-size: 18px; margin: 12px 0 8px; font-family: var(--body); font-weight: 750; letter-spacing: 0; }
-    .step p { color: var(--text-2); font-size: 14.5px; }
-
-    /* ---------- painel (ilustração) ---------- */
-    .dash-wrap { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 44px; align-items: center; }
-    .ticks { list-style: none; display: grid; gap: 14px; margin-top: 24px; }
-    .ticks li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; color: var(--text-2); font-size: 15px; }
-    .ticks li b { color: var(--text); display: block; }
-    .ticks li::before { content: '✓'; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--good-soft); color: var(--good); font-weight: 800; font-size: 13px; margin-top: 1px; }
-    .mock { border-radius: 18px; border: 1px solid var(--line-2); background: var(--surface); overflow: hidden; box-shadow: 0 50px 120px -40px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(139, 124, 255, 0.06); }
-    .mock-bar { display: flex; align-items: center; gap: 7px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
-    .mock-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-2); }
-    .mock-bar span { margin-left: 10px; font-size: 12px; color: var(--muted); font-family: var(--mono); }
-    .mock-body { padding: 20px; display: grid; gap: 14px; }
-    .kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-    .kpi { padding: 14px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); }
-    .kpi small { display: block; font-size: 12px; color: var(--muted); }
-    .kpi b { font-family: var(--display); font-size: 20px; }
-    .kpi.acc b { color: var(--accent-2); }
-    .bars { display: flex; align-items: flex-end; gap: 6px; height: 112px; padding: 14px 14px 10px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); }
-    .bars i { flex: 1; min-width: 0; border-radius: 5px 5px 2px 2px; background: linear-gradient(180deg, var(--accent), rgba(139, 124, 255, 0.35)); transform-origin: bottom; }
-    .mrows { display: grid; border-radius: 12px; border: 1px solid var(--line); overflow: hidden; background: var(--bg); }
-    .mrow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 11px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
-    .mrow:last-child { border-bottom: 0; }
-    .mrow small { display: block; color: var(--muted); font-size: 12px; font-family: var(--mono); }
-    .mrow .amt { font-family: var(--display); font-weight: 600; text-align: right; }
-    .tag-note { display: inline-block; margin-top: 12px; font-size: 12px; color: var(--muted); }
-
-    /* ---------- preços ---------- */
-    .pricing { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
-    .price { padding: 32px; position: relative; overflow: hidden; }
-    .price::before { content: ''; position: absolute; width: 360px; height: 360px; right: -140px; top: -170px; background: radial-gradient(closest-side, rgba(139, 124, 255, 0.2), transparent); }
-    .price .big { font-family: var(--display); font-size: 68px; font-weight: 700; line-height: 1; position: relative; }
-    .price .big small { font-size: 22px; color: var(--muted); font-weight: 600; }
-    .price ul { list-style: none; display: grid; gap: 11px; margin: 26px 0 28px; position: relative; }
-    .price li { display: flex; gap: 10px; color: var(--text-2); font-size: 14.5px; }
-    .price li::before { content: '✓'; color: var(--good); font-weight: 800; }
-    .calc { padding: 32px; display: grid; gap: 16px; align-content: start; }
-    .calc .rows { display: grid; gap: 10px; padding: 16px; border-radius: var(--radius-sm); background: var(--bg); border: 1px solid var(--line); }
-    .calc .rows div { display: flex; justify-content: space-between; font-size: 14px; color: var(--text-2); }
-    .calc .rows .total { padding-top: 10px; border-top: 1px dashed var(--line-2); color: var(--text); font-size: 17px; font-weight: 750; }
-    .ptable { margin-top: 16px; }
-    .ptable table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    .ptable th, .ptable td { padding: 12px 18px; text-align: right; border-bottom: 1px solid var(--line); }
-    .ptable th:first-child, .ptable td:first-child { text-align: left; }
-    .ptable th { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; background: var(--surface-2); }
-    .ptable tr:last-child td { border-bottom: 0; }
-    .ptable td { font-variant-numeric: tabular-nums; color: var(--text-2); }
-    .ptable td:last-child { color: var(--text); font-weight: 700; }
-    .ptable .scroll { overflow-x: auto; }
-    .ptable table { min-width: 460px; } .ptable td, .ptable th { white-space: nowrap; }
-
-    /* ---------- desenvolvedores ---------- */
-    .devs { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 44px; align-items: start; }
-    .devs .tabs { margin-top: 0; }
-    .mini-list { list-style: none; display: grid; gap: 14px; margin: 24px 0 28px; }
-    .mini-list li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; color: var(--text-2); font-size: 14.5px; }
-    .mini-list li b { color: var(--text); display: block; }
-    .mini-list li i { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-2); font-style: normal; font-weight: 800; font-size: 13px; }
-    .creds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-    .credcard { padding: 24px; position: relative; overflow: hidden; }
-    .credcard .tag { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
-    .credcard.pub .tag { background: var(--good-soft); color: var(--good); }
-    .credcard.priv .tag { background: var(--bad-soft); color: var(--bad); }
-    .credcard h3 { font-size: 19px; margin: 14px 0 6px; font-family: var(--body); font-weight: 750; letter-spacing: 0; }
-    .credcard p { color: var(--text-2); font-size: 14px; }
-    .credcard code.v { display: block; margin: 16px 0; padding: 12px 14px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); font-family: var(--mono); font-size: 13px; color: var(--text-2); overflow-wrap: anywhere; }
-    .credcard code.v em { font-style: normal; color: var(--muted); }
-    .credcard ul { list-style: none; display: grid; gap: 8px; font-size: 14px; color: var(--text-2); }
-    .credcard li::before { content: '•'; color: var(--accent-2); margin-right: 8px; }
-    .rot { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
-    .rot .card { padding: 22px; }
-    .rot h4 { font-family: var(--body); font-size: 15px; font-weight: 750; margin: 10px 0 6px; letter-spacing: 0; }
-    .rot p { color: var(--text-2); font-size: 14px; }
-    .rot .ico { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-2); }
-    .rot .ico svg { width: 19px; height: 19px; }
-    .subhead { margin: 56px 0 18px; display: flex; align-items: end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-    .subhead h3 { font-size: 24px; }
-    .subhead p { color: var(--text-2); max-width: 560px; margin-top: 6px; }
-
-    /* ---------- webhooks ---------- */
-    .events { display: grid; gap: 8px; margin-top: 8px; }
-    .ev { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--line); font-size: 14px; color: var(--text-2); }
-    .ev code { font-family: var(--mono); font-size: 13px; color: var(--accent-2); min-width: 150px; }
-    .ev i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-
-    /* ---------- segurança ---------- */
-    .sec { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-    .sec .card { padding: 22px; }
-    .sec .ico { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: var(--good-soft); color: var(--good); margin-bottom: 14px; }
-    .sec .ico svg { width: 20px; height: 20px; }
-    .sec h3 { font-family: var(--body); font-size: 15.5px; font-weight: 750; margin-bottom: 6px; letter-spacing: 0; }
-    .sec p { color: var(--text-2); font-size: 14px; }
-
-    /* ---------- casos de uso / comparação ---------- */
-    .cases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-    .case { padding: 24px; }
-    .case small { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-2); }
-    .case h3 { font-size: 18px; margin: 10px 0 8px; font-family: var(--body); font-weight: 750; letter-spacing: 0; }
-    .case p { color: var(--text-2); font-size: 14.5px; }
-    .cmp { overflow-x: auto; }
-    .cmp table { width: 100%; border-collapse: collapse; min-width: 560px; font-size: 14.5px; }
-    .cmp th, .cmp td { padding: 14px 20px; text-align: center; border-bottom: 1px solid var(--line); }
-    .cmp th:first-child, .cmp td:first-child { text-align: left; color: var(--text-2); }
-    .cmp th { font-size: 13px; background: var(--surface-2); color: var(--muted); }
-    .cmp th.us { color: var(--accent-2); background: rgba(139, 124, 255, 0.1); }
-    .cmp td.us { background: rgba(139, 124, 255, 0.05); }
-    .cmp tr:last-child td { border-bottom: 0; }
-    .yes { color: var(--good); font-weight: 800; } .no { color: var(--muted); }
-
-    .split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-    .splitcard { padding: 28px; }
-    .splitcard small { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-    .splitcard.us { border-color: rgba(139, 124, 255, 0.4); background: linear-gradient(180deg, rgba(139, 124, 255, 0.08), var(--surface)); }
-    .splitcard.us small { color: var(--accent-2); }
-    .splitcard h3 { font-size: 20px; margin: 10px 0 16px; font-family: var(--body); font-weight: 750; letter-spacing: 0; }
-    .splitcard ul { list-style: none; display: grid; gap: 11px; }
-    .splitcard li { display: flex; gap: 10px; color: var(--text-2); font-size: 14.5px; }
-    .splitcard li::before { content: '✓'; color: var(--good); font-weight: 800; }
-    .splitcard:not(.us) li::before { color: var(--muted); }
-
-    /* ---------- faq / final ---------- */
-    .faq-wrap { display: grid; grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr); gap: 48px; }
-    .final { text-align: center; padding: 96px 0; border-top: 1px solid var(--line); position: relative; overflow: hidden; }
-    .final::before { content: ''; position: absolute; width: 900px; height: 500px; left: 50%; top: -200px; transform: translateX(-50%); background: radial-gradient(closest-side, rgba(139, 124, 255, 0.2), transparent); pointer-events: none; }
-    .final .wrap { position: relative; }
-    .final h2 { font-size: clamp(30px, 4.2vw, 48px); margin-bottom: 14px; }
-    .final p { color: var(--text-2); margin: 0 auto 28px; max-width: 520px; font-size: 17px; }
-    .final .cta { justify-content: center; }
-    .fine { margin-top: 18px; font-size: 13px; color: var(--muted); }
-
-    @media (max-width: 1000px) {
-      .grid-feat, .cases { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .sec { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .strip .wrap { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .strip .it { border-bottom: 1px solid var(--line); }
-      .hook { right: -8px; }
-    }
-    @media (max-width: 900px) {
-      .hero { padding: 48px 0 48px; }
-      .hero .wrap, .pricing, .devs, .dash-wrap, .faq-wrap { grid-template-columns: minmax(0, 1fr); }
-      .hero .wrap { gap: 52px; }
-      .dash-wrap, .devs, .faq-wrap { gap: 32px; }
-      .steps, .rot { grid-template-columns: minmax(0, 1fr); }
-      .notify { position: static; margin-top: 14px; opacity: 1; transform: none; display: none; }
-      .demo.is-paid .notify { display: flex; }
-      .flow { grid-template-columns: minmax(0, 1fr); gap: 18px; }
-      .flow .node { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; text-align: left; align-items: center; }
-      .flow .node .ball { margin: 0; }
-      .flow .node:not(:last-child)::after { display: none; }
-    }
-    @media (max-width: 640px) {
-      .grid-feat, .cases, .sec, .creds, .split { grid-template-columns: minmax(0, 1fr); }
-      .kpis { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-      .kpis .kpi:last-child { grid-column: 1 / -1; }
-      .hook { display: none; }
-      .demo { margin-bottom: 30px; }
-      .price, .calc { padding: 24px; }
-      .price .big { font-size: 56px; }
-    }
-  </style>
 </head>
 <body>
-  <a href="#conteudo" class="skip">Pular para o conteúdo</a>
-  <header class="top">
-    <div class="wrap">
-      <a href="/" class="brand" id="brand">Zyropay</a>
-      <nav class="main" aria-label="Principal">
-        <a href="#recursos">Recursos</a><a href="#como">Como funciona</a><a href="#precos">Preços</a><a href="#api">API</a><a href="#seguranca">Segurança</a><a href="#faq">FAQ</a><a href="/docs">Documentação</a>
-      </nav>
-      <div class="side">
-        <a href="/entrar" class="btn btn-ghost" id="navLogin">Entrar</a>
-        <a href="/cadastro" class="btn btn-primary">Criar conta</a>
-        <button class="burger" id="burger" type="button" aria-label="Abrir menu" aria-expanded="false" aria-controls="mnav"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 5h14M2 9h14M2 13h14"/></svg></button>
-      </div>
+  <div class="bg-glow" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <nav class="nav glass">
+    <a href="#topo" class="logo" aria-label="Like2k">
+      <svg viewBox="0 0 64 64"><path d="M32 50s-16-9.6-16-21.2C16 22.4 20.6 18 26 18c3 0 5 1.5 6 3 1-1.5 3-3 6-3 5.4 0 10 4.4 10 10.8C48 40.4 32 50 32 50z" fill="url(#lg)"/><defs><linearGradient id="lg" x1="0" y1="0" x2="64" y2="64"><stop stop-color="#ffb347"/><stop offset="1" stop-color="#ff2d55"/></linearGradient></defs></svg>
+      <span>LIKE<b>2K</b></span>
+    </a>
+    <button class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false"><i></i><i></i><i></i></button>
+    <div class="nav-links" id="navLinks">
+      <a href="#como-funciona">Como funciona</a>
+      <a href="#planos">Planos</a>
+      <a href="#acompanhar">Meu pedido</a>
+      <a href="#comprar" class="btn btn-primary btn-sm">Comprar likes</a>
     </div>
-    <div class="mnav" id="mnav">
-      <a href="#recursos">Recursos</a><a href="#como">Como funciona</a><a href="#precos">Preços</a><a href="#api">API e credenciais</a><a href="#seguranca">Segurança</a><a href="#faq">Perguntas frequentes</a><a href="/docs">Documentação</a><a href="/entrar">Entrar</a>
-    </div>
-  </header>
+  </nav>
 
-  <main id="conteudo">
-    <!-- ================= HERO ================= -->
-    <section class="hero">
-      <div class="wrap">
-        <div>
-          <span class="eyebrow"><i></i>PIX confirmado em segundos</span>
-          <h1>Receba PIX na hora.<br /><em>Pague só 2%.</em></h1>
-          <p class="lead">A camada de produto para o seu Mercado Pago: cobrança pelo painel ou pela API, checkout pronto e aviso automático no seu sistema. O PIX cai direto na sua conta.</p>
-          <div class="cta">
-            <a href="/cadastro" class="btn btn-primary btn-lg">Criar conta grátis</a>
-            <a href="/docs" class="btn btn-lg">Ver a documentação</a>
+  <div class="notice" id="notice" hidden></div>
+
+  <main>
+    <section class="hero" id="topo">
+      <div class="wrap hero-grid">
+        <div class="hero-copy reveal">
+          <span class="eyebrow">Free Fire · Likes automáticos</span>
+          <h1><span class="grad">2K LIKES</span><br />no seu perfil<br /><span class="thin">em minutos.</span></h1>
+          <p class="lead" id="tagline">Digite o seu ID, pague no PIX e receba 2.000 likes automaticamente. Sem login, sem senha, sem enrolação.</p>
+          <div class="hero-cta">
+            <a href="#comprar" class="btn btn-primary btn-lg">Comprar agora
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+            </a>
+            <a href="#planos" class="btn btn-lg">Ver planos</a>
           </div>
-          <div class="facts">
-            <div><strong>2%</strong><span>por PIX pago</span></div>
-            <div><strong>R$ 0,30</strong><span>taxa mínima</span></div>
-            <div><strong>R$ 0</strong><span>de mensalidade</span></div>
+          <div class="hero-stats">
+            <div class="stat-chip glass"><strong id="heroPrice">R$ 9,90</strong><span>por 2.000 likes</span></div>
+            <div class="stat-chip glass"><strong>PIX</strong><span>envio automático</span></div>
+            <div class="stat-chip glass"><strong>2K/dia</strong><span>em cada ID</span></div>
           </div>
         </div>
+        <div class="hero-art reveal" aria-hidden="true">
+          <div class="orb"></div>
+          <div class="heart-big">
+            <svg viewBox="0 0 64 64"><path d="M32 54s-20-12-20-26.5C12 19.5 17.8 14 24.5 14c3.8 0 6.3 1.9 7.5 3.8 1.2-1.9 3.7-3.8 7.5-3.8C46.2 14 52 19.5 52 27.5 52 42 32 54 32 54z" fill="url(#hg)"/><defs><linearGradient id="hg" x1="0" y1="0" x2="64" y2="64"><stop stop-color="#ffb347"/><stop offset="1" stop-color="#ff2d55"/></linearGradient></defs></svg>
+            <span class="counter" id="heroCounter">+2.000</span>
+          </div>
+          <div class="float f1 glass"><b>+2.000</b> likes enviados</div>
+          <div class="float f2 glass"><b>PIX</b> confirmado</div>
+          <div class="float f3 glass"><b>ID</b> verificado</div>
+        </div>
+      </div>
+    </section>
 
-        <div class="demo" id="demo" aria-label="Exemplo de checkout PIX">
-          <div class="card">
-            <div class="demo-top"><span>Loja Aurora</span><span class="status pending" id="demoStatus">Aguardando</span></div>
-            <div class="demo-amount num">R$ 149,90</div>
-            <div class="muted" style="font-size:14px">Pedido #4821 · Tênis Runner</div>
-            <div class="demo-qr"><canvas id="demoQr" width="29" height="29"></canvas>
-              <div class="demo-paid"><svg viewBox="0 0 64 64" fill="none"><circle cx="32" cy="32" r="30" fill="#3ddc97" opacity=".16"/><path d="m20 33 8 8 16-17" stroke="#3ddc97" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <section class="section" id="comprar">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <span class="eyebrow">Comprar</span>
+          <h2>Três passos e <span class="grad">pronto.</span></h2>
+        </div>
+        <div class="checkout glass reveal">
+          <div class="step" data-step="1">
+            <div class="step-head"><span class="n">1</span><h3>Seu ID do Free Fire</h3></div>
+            <form class="row" id="formUid" autocomplete="off">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" id="uid" placeholder="Ex.: 123456789" maxlength="12" required />
+              <button class="btn btn-primary" id="btnVerify" type="submit">Verificar</button>
+            </form>
+            <p class="hint">O ID fica no seu perfil do jogo, abaixo do nick. Só números.</p>
+            <div class="player" id="player" hidden></div>
+          </div>
+
+          <div class="step" data-step="2">
+            <div class="step-head"><span class="n">2</span><h3>Escolha o plano</h3></div>
+            <div class="plans compact" id="plansPick"></div>
+          </div>
+
+          <div class="step" data-step="3">
+            <div class="step-head"><span class="n">3</span><h3>Pague no PIX</h3></div>
+            <label class="field">
+              <span>WhatsApp ou e-mail (opcional, para suporte)</span>
+              <input type="text" id="contact" placeholder="(11) 99999-9999" maxlength="80" />
+            </label>
+            <div class="summary">
+              <div><span class="muted">Plano</span><strong id="sumPlan">—</strong></div>
+              <div><span class="muted">Jogador</span><strong id="sumPlayer">—</strong></div>
+              <div><span class="muted">Total</span><strong class="grad big" id="sumTotal">—</strong></div>
             </div>
-            <div class="demo-copy">00020126580014br.gov.bcb.pix0136a1f4c2…</div>
-            <div class="demo-foot"><span class="muted">Expira em <b class="num" id="demoTimer" style="color:var(--text)">29:41</b></span><span class="muted">Copiar código</span></div>
+            <p class="error" id="checkoutError" hidden></p>
+            <button class="btn btn-primary btn-lg btn-block" id="btnBuy" disabled>Gerar PIX</button>
+            <p class="hint">Depois de pago, os likes começam a ser enviados em até 1 minuto. Você acompanha tudo na página do pedido.</p>
           </div>
-          <div class="hook" aria-hidden="true"><b>POST</b> /webhooks/zyropay<br />charge.paid · <b>200 OK</b></div>
-          <div class="notify"><span class="ic">✓</span><div><b>PIX recebido</b>R$ 149,90 · Loja Aurora</div></div>
         </div>
       </div>
     </section>
 
-    <!-- ================= FAIXA ================= -->
-    <div class="strip">
+    <section class="section" id="planos">
       <div class="wrap">
-        <div class="it"><strong>PIX 24/7</strong><span>Receba qualquer dia e hora</span></div>
-        <div class="it"><strong>2% · mín. R$ 0,30</strong><span>Só quando a venda acontece</span></div>
-        <div class="it"><strong>API + Webhooks</strong><span>Integre em poucas linhas</span></div>
-        <div class="it"><strong>Client ID + Secret</strong><span>Credenciais que você mesmo troca</span></div>
-        <div class="it"><strong>Direto na sua conta</strong><span>O PIX cai no seu Mercado Pago</span></div>
+        <div class="section-head reveal">
+          <span class="eyebrow">Planos</span>
+          <h2>2.000 likes por dia, <span class="grad">do seu jeito.</span></h2>
+          <p class="muted">O Free Fire aceita até 2.000 likes por dia em cada ID. Nos planos por dias, enviamos 2.000 todo dia, automaticamente.</p>
+        </div>
+        <div class="plans" id="plansGrid"></div>
       </div>
-    </div>
+    </section>
 
-    <!-- ================= RECURSOS ================= -->
-    <section class="block" id="recursos">
+    <section class="section" id="como-funciona">
       <div class="wrap">
-        <div class="head reveal"><span class="kicker">Recursos</span><h2>Tudo para cobrar por PIX, sem montar nada do zero</h2><p>Do link de pagamento à conciliação automática. Use só o painel no primeiro dia e conecte a API quando fizer sentido.</p></div>
-        <div class="grid-feat">
-          <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 14h3v3M21 14v.01M14 21h.01M17.5 21H21v-3.5"/></svg></div><h3>Checkout pronto</h3><p>Cada cobrança tem uma página própria com QR Code, copia e cola, contagem regressiva e confirmação automática. Basta mandar o link.</p></div>
-          <div class="card feat hl reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.7-8.7M16 7l3 3M14 9l2 2"/></svg></div><h3>Credenciais em duas partes</h3><p>Client ID público e Client Secret privado. Geradas automaticamente, trocadas por você quando quiser, com período de transição.</p></div>
-          <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m8 8-5 4 5 4M16 8l5 4-5 4M14 5l-4 14"/></svg></div><h3>API REST simples</h3><p>Crie, consulte, liste, cancele e devolva cobranças; veja o resumo do período. JSON, valores em centavos e erros com código estável.</p></div>
-          <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg></div><h3>Webhooks assinados</h3><p>Seu sistema recebe <span class="mono">charge.paid</span> na hora, com assinatura HMAC-SHA256 e até 6 tentativas se ele estiver fora do ar.</p></div>
-          <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg></div><h3>Painel completo</h3><p>Recebido, taxas, vendas do dia, gráfico dos últimos 14 dias, busca por cobrança, histórico de webhooks e exportação CSV para conciliar.</p></div>
-          <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></div><h3>Dinheiro na sua conta</h3><p>Você conecta o seu Mercado Pago em um clique e o PIX cai direto nele. O Zyropay nunca segura o seu dinheiro, então não existe saque nem saldo parado.</p></div>
-          <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg></div><h3>Idempotência</h3><p>Reenvie a mesma requisição com <span class="mono">Idempotency-Key</span> e nunca crie a mesma cobrança duas vezes, mesmo com falha de rede.</p></div>
-          <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8ZM7.5 7.5h.01"/></svg></div><h3>Seu código de pedido</h3><p>Mande <span class="mono">external_id</span> com o número do pedido e consulte a cobrança por ele, sem guardar nosso identificador.</p></div>
-          <div class="card feat reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Zm-3 10 2.5 2.5L15.5 9.5"/></svg></div><h3>Conciliação em CSV</h3><p>Exporte as cobranças do período com valor, taxa e líquido, e cruze com o extrato do Mercado Pago sem planilha manual.</p></div>
+        <div class="section-head reveal">
+          <span class="eyebrow">Como funciona</span>
+          <h2>Simples assim.</h2>
+        </div>
+        <div class="steps-grid">
+          <div class="card glass reveal"><span class="n">01</span><h3>Digite o ID</h3><p>Conferimos o nick antes de qualquer cobrança, para você ter certeza de que é o perfil certo.</p></div>
+          <div class="card glass reveal"><span class="n">02</span><h3>Escolha o plano</h3><p>2K uma vez, ou 2K por dia durante 7 ou 30 dias. Os preços estão sempre atualizados aqui.</p></div>
+          <div class="card glass reveal"><span class="n">03</span><h3>Pague no PIX</h3><p>QR Code e copia-e-cola na hora. O pagamento é confirmado automaticamente, sem mandar comprovante.</p></div>
+          <div class="card glass reveal"><span class="n">04</span><h3>Receba os likes</h3><p>Em até 1 minuto após o PIX os likes entram no perfil. Nos planos por dias, todo dia no mesmo horário.</p></div>
         </div>
       </div>
     </section>
 
-    <!-- ================= COMO FUNCIONA ================= -->
-    <section class="block" id="como">
-      <div class="wrap">
-        <div class="head reveal"><span class="kicker">Como funciona</span><h2>Do cadastro ao primeiro PIX em minutos</h2><p>Sem maquininha, sem contrato e sem integração complicada.</p></div>
-        <div class="flow reveal" aria-label="Fluxo de um pagamento">
-          <div class="node"><div class="ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></div><div><b>Seu sistema</b><span>cria a cobrança</span></div></div>
-          <div class="node"><div class="ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg></div><div><b>Zyropay</b><span>cria o PIX na sua conta</span></div></div>
-          <div class="node"><div class="ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/></svg></div><div><b>Cliente</b><span>paga no app do banco</span></div></div>
-          <div class="node"><div class="ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10 12 4l9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/></svg></div><div><b>Seu Mercado Pago</b><span>recebe o PIX</span></div></div>
-          <div class="node"><div class="ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/></svg></div><div><b>Webhook</b><span>avisa seu sistema</span></div></div>
-        </div>
-        <div class="steps">
-          <div class="card step reveal"><span class="n">01</span><h3>Conecte e cobre</h3><p>Conecte o seu Mercado Pago em um clique. Depois digite o valor no painel ou chame <span class="mono">POST /v1/charges</span>: o QR Code, o copia e cola e o link saem na hora.</p></div>
-          <div class="card step reveal"><span class="n">02</span><h3>Seu cliente paga</h3><p>Envie o link por WhatsApp, e-mail ou mostre na tela. A página conta o tempo e confirma sozinha assim que o PIX cai.</p></div>
-          <div class="card step reveal"><span class="n">03</span><h3>O dinheiro já é seu</h3><p>O PIX cai direto na sua conta Mercado Pago, com a comissão do Zyropay descontada na origem. Seu sistema é avisado por webhook.</p></div>
+    <section class="section" id="acompanhar">
+      <div class="wrap narrow">
+        <div class="card glass reveal">
+          <span class="eyebrow">Meu pedido</span>
+          <h3>Acompanhar um pedido</h3>
+          <p class="muted">Digite o código que aparece na página do pedido (ex.: 7KQ2M9XA1B).</p>
+          <form class="row" id="formTrack">
+            <input type="text" id="track" placeholder="Código do pedido" maxlength="12" required />
+            <button class="btn" type="submit">Abrir</button>
+          </form>
         </div>
       </div>
     </section>
 
-    <!-- ================= PAINEL ================= -->
-    <section class="block" id="painel">
-      <div class="wrap dash-wrap">
-        <div class="reveal">
-          <div class="head" style="margin-bottom:0"><span class="kicker">Painel do lojista</span><h2>Suas vendas à vista, sem planilha</h2><p>Acompanhe cada centavo: o que entrou, quanto foi de taxa e o que ainda está aguardando.</p></div>
-          <ul class="ticks">
-            <li><div><b>Recebido e taxas em tempo real</b>Líquido, taxa do Zyropay e total bruto sempre atualizados.</div></li>
-            <li><div><b>Gerador de cobranças</b>Valor, descrição e dados do cliente; o link vai direto para a área de transferência.</div></li>
-            <li><div><b>Credenciais, conexão e webhooks</b>Conecte o Mercado Pago, troque Client ID e Client Secret e veja cada tentativa de entrega.</div></li>
-            <li><div><b>Funciona no celular</b>O painel inteiro se adapta à tela pequena.</div></li>
-          </ul>
+    <section class="section" id="faq">
+      <div class="wrap narrow">
+        <div class="section-head reveal">
+          <span class="eyebrow">Dúvidas</span>
+          <h2>Perguntas frequentes</h2>
         </div>
-        <div class="reveal">
-          <div class="mock" aria-label="Exemplo ilustrativo do painel">
-            <div class="mock-bar"><i></i><i></i><i></i><span>zyropay.app/app</span></div>
-            <div class="mock-body">
-              <div class="kpis">
-                <div class="kpi acc"><small>Recebido (30 dias)</small><b class="num">R$ 8.412,60</b></div>
-                <div class="kpi"><small>Vendas hoje</small><b class="num">R$ 1.936,00</b></div>
-                <div class="kpi"><small>Conversão</small><b class="num">87%</b></div>
-              </div>
-              <div class="bars" aria-hidden="true" id="bars"></div>
-              <div class="mrows">
-                <div class="mrow"><div><b>Pedido #4821</b><small>ch_9f2c41e0a7</small></div><span class="status paid">Pago</span><span class="amt">R$ 149,90</span></div>
-                <div class="mrow"><div><b>Assinatura Pro</b><small>ch_1d8a7bc03e</small></div><span class="status pending">Aguardando</span><span class="amt">R$ 89,00</span></div>
-                <div class="mrow"><div><b>Pedido #4820</b><small>ch_77e0f1a9c2</small></div><span class="status paid">Pago</span><span class="amt">R$ 312,40</span></div>
-              </div>
-            </div>
-          </div>
-          <span class="tag-note">Ilustração com dados de exemplo.</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- ================= PREÇOS ================= -->
-    <section class="block" id="precos">
-      <div class="wrap">
-        <div class="head reveal"><span class="kicker">Preços</span><h2>Um preço, sem letra miúda</h2><p>Você só paga quando recebe. Cobrança que expira ou é cancelada não custa nada.</p></div>
-        <div class="pricing">
-          <div class="card price reveal">
-            <div class="big">2%<small> por PIX pago</small></div>
-            <p class="muted" style="margin-top:10px;position:relative">com mínimo de R$ 0,30 por transação</p>
-            <ul>
-              <li>Sem mensalidade, adesão ou taxa de manutenção</li>
-              <li>Checkout, QR Code e copia e cola inclusos</li>
-              <li>API REST, webhooks assinados e idempotência</li>
-              <li>Credenciais de API que você gera e troca sozinho</li>
-              <li>PIX direto na sua conta Mercado Pago, sem saque</li>
-              <li>Taxa só quando o PIX é pago, descontada na origem</li>
-            </ul>
-            <a href="/cadastro" class="btn btn-primary btn-lg" style="position:relative">Criar conta grátis</a>
-          </div>
-          <div class="card calc reveal">
-            <div class="field"><label for="calcIn">Simule uma venda</label>
-              <div class="input-money"><span>R$</span><input class="input num" id="calcIn" inputmode="numeric" value="100,00" aria-label="Valor da venda" /></div>
-            </div>
-            <div class="rows">
-              <div><span>Valor da venda</span><b class="num" id="cGross">R$ 100,00</b></div>
-              <div><span>Taxa Zyropay</span><b class="num" id="cFee">− R$ 2,00</b></div>
-              <div class="total"><span>Líquido para você</span><span class="num" id="cNet">R$ 98,00</span></div>
-            </div>
-            <p class="muted" style="font-size:13px">Abaixo de R$ 15,00 vale a taxa mínima de R$ 0,30. A tarifa do próprio Mercado Pago pelo PIX é cobrada por ele, à parte. Volume alto? A taxa pode ser negociada por conta.</p>
-          </div>
-        </div>
-        <div class="card ptable reveal">
-          <div class="scroll"><table>
-            <thead><tr><th>Valor da venda</th><th>Taxa</th><th>Taxa efetiva</th><th>Líquido para você</th></tr></thead>
-            <tbody>
-              <tr><td>R$ 5,00</td><td>R$ 0,30</td><td>6,0%</td><td>R$ 4,70</td></tr>
-              <tr><td>R$ 15,00</td><td>R$ 0,30</td><td>2,0%</td><td>R$ 14,70</td></tr>
-              <tr><td>R$ 49,90</td><td>R$ 1,00</td><td>2,0%</td><td>R$ 48,90</td></tr>
-              <tr><td>R$ 149,90</td><td>R$ 3,00</td><td>2,0%</td><td>R$ 146,90</td></tr>
-              <tr><td>R$ 1.000,00</td><td>R$ 20,00</td><td>2,0%</td><td>R$ 980,00</td></tr>
-              <tr><td>R$ 10.000,00</td><td>R$ 200,00</td><td>2,0%</td><td>R$ 9.800,00</td></tr>
-            </tbody>
-          </table></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ================= API ================= -->
-    <section class="block" id="api">
-      <div class="wrap">
-        <div class="head reveal"><span class="kicker">Para quem desenvolve</span><h2>Uma API pequena, previsível e segura</h2><p>Valores sempre em centavos, respostas em JSON e erros com código estável. Autenticação com duas credenciais que você controla.</p></div>
-        <div class="devs">
-          <div class="reveal">
-            <ul class="mini-list">
-              <li><i>1</i><div><b>Autenticação em duas partes</b>Client ID + Client Secret por HTTP Basic ou headers. O secret nunca é guardado em texto puro.</div></li>
-              <li><i>2</i><div><b>Idempotência</b>Mande <span class="mono">Idempotency-Key</span> e repita a chamada sem medo.</div></li>
-              <li><i>3</i><div><b>Paginação e filtros</b>Liste por status ou <span class="mono">external_id</span> com cursor <span class="mono">starting_after</span>.</div></li>
-              <li><i>4</i><div><b>Limites claros</b>120 requisições por minuto, com cabeçalhos <span class="mono">X-RateLimit-*</span> em toda resposta.</div></li>
-            </ul>
-            <div class="cta" style="margin-top:0"><a href="/docs" class="btn btn-primary">Ler a documentação</a><a href="/docs#inicio-rapido" class="btn">Início rápido</a></div>
-          </div>
-          <div class="reveal">
-            <div class="tabs">
-              <pre data-lang="curl" data-label="cURL">
-# criar uma cobrança de R$ 149,90
-curl -X POST https://zyropay.app/v1/charges \
-  -u "$ZYROPAY_CLIENT_ID:$ZYROPAY_CLIENT_SECRET" \
-  -H "Idempotency-Key: pedido-4821" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "amount": 14990,
-    "description": "Pedido #4821",
-    "external_id": "4821"
-  }'</pre>
-              <pre data-lang="js" data-label="Node.js">
-const auth = Buffer.from(
-  `${process.env.ZYROPAY_CLIENT_ID}:${process.env.ZYROPAY_CLIENT_SECRET}`
-).toString('base64');
-
-const res = await fetch('https://zyropay.app/v1/charges', {
-  method: 'POST',
-  headers: {
-    Authorization: `Basic ${auth}`,
-    'Content-Type': 'application/json',
-    'Idempotency-Key': 'pedido-4821',
-  },
-  body: JSON.stringify({ amount: 14990, description: 'Pedido #4821', external_id: '4821' }),
-});
-const charge = await res.json();
-console.log(charge.checkout_url);</pre>
-              <pre data-lang="php" data-label="PHP">
-&lt;?php
-$ch = curl_init('https://zyropay.app/v1/charges');
-curl_setopt_array($ch, [
-  CURLOPT_POST => true,
-  CURLOPT_USERPWD => getenv('ZYROPAY_CLIENT_ID') . ':' . getenv('ZYROPAY_CLIENT_SECRET'),
-  CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Idempotency-Key: pedido-4821'],
-  CURLOPT_POSTFIELDS => json_encode(['amount' => 14990, 'description' => 'Pedido #4821', 'external_id' => '4821']),
-  CURLOPT_RETURNTRANSFER => true,
-]);
-$charge = json_decode(curl_exec($ch), true);
-echo $charge['checkout_url'];</pre>
-              <pre data-lang="py" data-label="Python">
-import os, requests
-
-r = requests.post(
-    "https://zyropay.app/v1/charges",
-    auth=(os.environ["ZYROPAY_CLIENT_ID"], os.environ["ZYROPAY_CLIENT_SECRET"]),
-    headers={"Idempotency-Key": "pedido-4821"},
-    json={"amount": 14990, "description": "Pedido #4821", "external_id": "4821"},
-)
-print(r.json()["checkout_url"])</pre>
-            </div>
-            <div class="cb"><div class="cb-bar"><span>resposta · 201 Created</span></div>
-<pre data-lang="json">{
-  "id": "ch_9f2c41e0a7b35d18c4e2",
-  "status": "pending",
-  "amount": 14990,
-  "fee": 300,
-  "net_amount": 14690,
-  "external_id": "4821",
-  "pix": { "copy_paste": "00020126…", "qr_code_image": "data:image/png;base64,…" },
-  "checkout_url": "https://zyropay.app/pay/ch_9f2c41e0a7b35d18c4e2",
-  "expires_at": "2026-10-01T15:30:00.000Z"
-}</pre></div>
-          </div>
-        </div>
-
-        <div class="subhead reveal"><div><h3>Credenciais em duas partes</h3><p>Um identificador público e um segredo privado. Assim, ver o Client ID em um log não dá acesso a nada, e o Client Secret nunca fica salvo em texto puro no Zyropay.</p></div><a class="btn" href="/docs#autenticacao">Como autenticar</a></div>
-        <div class="creds">
-          <div class="card credcard pub reveal">
-            <span class="tag">Público</span><h3>Client ID</h3>
-            <p>Identifica a sua conta. Pode aparecer em logs e painéis.</p>
-            <code class="v">zp_id_<em>7d99d2216afbbe0d</em></code>
-            <ul><li>Gerado automaticamente no cadastro</li><li>Sempre visível no painel</li><li>Pode ser trocado junto com o secret</li></ul>
-          </div>
-          <div class="card credcard priv reveal">
-            <span class="tag">Privado</span><h3>Client Secret</h3>
-            <p>Prova que a requisição é sua. Guarde como uma senha.</p>
-            <code class="v">zp_sk_<em>••••••••••••••••••••••••••••</em>a3f9</code>
-            <ul><li>Gerado automaticamente no primeiro acesso</li><li>Mostrado uma única vez, guardado só como hash</li><li>Você troca ou revoga quando quiser</li></ul>
-          </div>
-        </div>
-        <div class="rot">
-          <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg></div><h4>Regenere em um clique</h4><p>No painel, em Integração, gere um novo Client Secret ou um par novo (ID + Secret). Confirmamos com a sua senha.</p></div>
-          <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><h4>Troca sem derrubar a loja</h4><p>Mantenha o segredo antigo valendo por 1 ou 24 horas enquanto você atualiza seus servidores. Depois ele expira sozinho.</p></div>
-          <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg></div><h4>Revogue na hora</h4><p>Suspeita de vazamento? Revogue o segredo: a API para de aceitar a credencial no mesmo instante. Veja também a data do último uso.</p></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ================= WEBHOOKS ================= -->
-    <section class="block" id="webhooks">
-      <div class="wrap devs">
-        <div class="reveal">
-          <div class="head" style="margin-bottom:24px"><span class="kicker">Webhooks</span><h2>Seu sistema sabe do pagamento antes do cliente fechar a página</h2><p>Cada mudança vira um POST assinado para o seu endereço, com reenvio automático.</p></div>
-          <div class="events">
-            <div class="ev"><i style="background:var(--accent)"></i><code>charge.created</code>cobrança criada</div>
-            <div class="ev"><i style="background:var(--good)"></i><code>charge.paid</code>PIX pago e confirmado</div>
-            <div class="ev"><i style="background:var(--warn)"></i><code>charge.expired</code>prazo para pagar acabou</div>
-            <div class="ev"><i style="background:var(--muted)"></i><code>charge.canceled</code>cobrança cancelada</div>
-            <div class="ev"><i style="background:var(--bad)"></i><code>charge.refunded</code>pagamento devolvido</div>
-            <div class="ev"><i style="background:var(--accent-2)"></i><code>charge.failed</code>pagamento recusado</div>
-          </div>
-          <p class="muted" style="margin-top:16px;font-size:14px">Falhou? Tentamos de novo após 10 s, 1 min, 5 min, 30 min e 2 h. O histórico de entregas fica no painel.</p>
-        </div>
-        <div class="reveal">
-          <div class="cb"><div class="cb-bar"><span>POST https://loja.com/webhooks/zyropay</span></div>
-<pre data-lang="http">Zyropay-Signature: t=1790870400,v1=5b1c0f…e91a
-Zyropay-Event: charge.paid
-Content-Type: application/json</pre>
-<pre data-lang="json">{
-  "id": "evt_3a9f1c7d20e4b86a5f01",
-  "type": "charge.paid",
-  "created_at": "2026-10-01T15:02:11.482Z",
-  "data": {
-    "id": "ch_9f2c41e0a7b35d18c4e2",
-    "status": "paid",
-    "amount": 14990,
-    "fee": 300,
-    "net_amount": 14690,
-    "external_id": "4821",
-    "paid_at": "2026-10-01T15:02:10.901Z"
-  }
-}</pre></div>
-          <div class="tabs">
-            <pre data-lang="js" data-label="Validar · Node.js">
-import crypto from 'node:crypto';
-
-export function valid(rawBody, header, secret) {
-  const p = Object.fromEntries(header.split(',').map((s) => s.split('=')));
-  if (Math.abs(Date.now() / 1000 - Number(p.t)) > 300) return false;
-  const expected = crypto.createHmac('sha256', secret)
-    .update(`${p.t}.${rawBody}`).digest('hex');
-  return p.v1?.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(p.v1), Buffer.from(expected));
-}</pre>
-            <pre data-lang="py" data-label="Validar · Python">
-import hmac, hashlib, time
-
-def valid(raw_body: bytes, header: str, secret: str) -> bool:
-    p = dict(s.split("=", 1) for s in header.split(","))
-    if abs(time.time() - int(p["t"])) > 300:
-        return False
-    signed = p["t"].encode() + b"." + raw_body
-    expected = hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(p.get("v1", ""), expected)</pre>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ================= SEGURANÇA ================= -->
-    <section class="block" id="seguranca">
-      <div class="wrap">
-        <div class="head reveal"><span class="kicker">Segurança</span><h2>Feito para lidar com dinheiro</h2><p>Camadas simples e verificáveis, sem promessa vaga.</p></div>
-        <div class="sec">
-          <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div><h3>Secrets só como hash</h3><p>O Client Secret é exibido uma vez e guardado apenas como SHA-256. Nem a nossa equipe consegue ler.</p></div>
-          <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M4 6h16M4 18h10"/></svg></div><h3>Tokens do Mercado Pago cifrados</h3><p>A autorização da sua conta fica criptografada (AES-256-GCM) e você revoga quando quiser, aqui ou no Mercado Pago.</p></div>
-          <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z"/></svg></div><h3>Webhooks com HMAC</h3><p>Cada aviso é assinado com o seu segredo <span class="mono">whsec_</span>, com carimbo de tempo contra repetição.</p></div>
-          <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4m0 4h.01"/></svg></div><h3>Proteção contra força bruta</h3><p>Tentativas inválidas de credencial ou de login bloqueiam o autor por alguns minutos.</p></div>
-          <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div><h3>Limite de requisições</h3><p>120 por minuto por conta, com <span class="mono">Retry-After</span> quando passa do limite.</p></div>
-          <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg></div><h3>Contas verificadas</h3><p>CPF/CNPJ validado no cadastro e aprovação manual antes de liberar a API.</p></div>
-          <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></div><h3>Senha para ações críticas</h3><p>Trocar ou revogar credenciais exige a sua senha, mesmo com a sessão aberta.</p></div>
-          <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3M3 12a9 9 0 1 0 3-6.7L3 8"/></svg></div><h3>Rastro de uso</h3><p>O painel mostra quando as credenciais foram criadas, trocadas e usadas pela última vez.</p></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ================= CASOS ================= -->
-    <section class="block" id="casos">
-      <div class="wrap">
-        <div class="head reveal"><span class="kicker">Casos de uso</span><h2>Do vendedor solo ao e-commerce</h2><p>A mesma API serve para quem cobra três pedidos por dia ou milhares.</p></div>
-        <div class="cases">
-          <div class="card case reveal"><small>Loja virtual</small><h3>Checkout PIX no seu site</h3><p>Crie a cobrança ao fechar o pedido, mostre o QR e libere o produto quando chegar <span class="mono">charge.paid</span>.</p></div>
-          <div class="card case reveal"><small>Infoprodutos</small><h3>Entrega automática</h3><p>Libere o curso ou o arquivo no instante do pagamento, sem conferir extrato manualmente.</p></div>
-          <div class="card case reveal"><small>Assinaturas</small><h3>Cobrança recorrente por API</h3><p>Dispare uma cobrança por ciclo e envie o link ao assinante. Expiração e reenvio ficam por sua conta.</p></div>
-          <div class="card case reveal"><small>Serviços</small><h3>Link de pagamento</h3><p>Sem site? Gere a cobrança no painel e mande o link por WhatsApp. O cliente paga e você é avisado.</p></div>
-          <div class="card case reveal"><small>Eventos e ingressos</small><h3>Prazo para pagar</h3><p>Defina quanto tempo o PIX vale (de 5 min a 24 h) e segure o ingresso só enquanto ele estiver válido.</p></div>
-          <div class="card case reveal"><small>Plataformas</small><h3>Várias lojas, um padrão</h3><p>Use <span class="mono">external_id</span> para ligar cada cobrança ao seu pedido e concilie com uma consulta.</p></div>
-        </div>
-
-        <div class="subhead reveal" style="margin-top:72px"><div><h3>O que fica com o Mercado Pago e o que vem do Zyropay</h3><p>O Zyropay não substitui a sua conta: ele é a camada de produto que faz o PIX do Mercado Pago ser fácil de cobrar, integrar e acompanhar.</p></div></div>
-        <div class="split reveal">
-          <div class="card splitcard">
-            <small>Continua no Mercado Pago</small>
-            <h3>O PIX e o dinheiro</h3>
-            <ul><li>Processamento e liquidação do PIX</li><li>O dinheiro cai direto na sua conta, sem intermediário</li><li>A tarifa do PIX, conforme o plano da sua conta</li><li>Cadastro, KYC e contrato com você</li><li>Devoluções e extrato oficial</li></ul>
-          </div>
-          <div class="card splitcard us">
-            <small>Vem do Zyropay</small>
-            <h3>A camada de produto</h3>
-            <ul><li>API simples em português, com Client ID e Client Secret que você troca</li><li>Checkout PIX hospedado com QR, copia e cola e contagem</li><li>Webhooks assinados com reenvio automático e histórico</li><li>Painel de cobranças, taxas e conversão</li><li>Idempotência, <span class="mono">external_id</span> e exportação CSV para conciliação</li></ul>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ================= FAQ ================= -->
-    <section class="block" id="faq">
-      <div class="wrap faq-wrap">
-        <div class="reveal"><div class="head" style="margin-bottom:0"><span class="kicker">Perguntas frequentes</span><h2>Ficou com dúvida?</h2><p>As respostas mais comuns. Se não achar a sua, a <a href="/docs" style="color:var(--accent-2)">documentação</a> tem os detalhes.</p></div></div>
-        <div class="faq reveal">
-          <details open><summary>Como funciona a taxa?</summary><div>É de 2% sobre cada PIX pago, com mínimo de R$ 0,30. O Mercado Pago desconta essa comissão na origem, no momento do pagamento, e repassa para o Zyropay; o resto fica na sua conta. Cobranças expiradas ou canceladas não pagam nada. A tarifa do próprio Mercado Pago pelo PIX é cobrada por ele, à parte, conforme o plano da sua conta.</div></details>
-          <details><summary>Preciso ter conta no Mercado Pago?</summary><div>Sim. É o Mercado Pago que processa o PIX e recebe o dinheiro. Você conecta a sua conta ao Zyropay em um clique (autorização OAuth), sem repassar senha, e pode revogar quando quiser.</div></details>
-          <details><summary>O Zyropay segura o meu dinheiro?</summary><div>Não. O PIX cai direto na sua conta Mercado Pago. Por isso não existe saldo no Zyropay nem pedido de saque: você movimenta o dinheiro pelo próprio Mercado Pago.</div></details>
-          <details><summary>O que são o Client ID e o Client Secret?</summary><div>São as duas credenciais da API. O <b>Client ID</b> é público e identifica a sua conta; o <b>Client Secret</b> é privado e prova que é você. Elas são geradas automaticamente e você pode gerar novas a qualquer momento em Painel › Integração.</div></details>
-          <details><summary>Perdi o Client Secret. E agora?</summary><div>Por segurança ele aparece uma única vez e não é possível recuperá-lo. Gere um novo no painel (confirmando sua senha) e atualize o seu sistema. Se quiser, o segredo antigo continua valendo por 1 ou 24 horas para você trocar sem interrupção.</div></details>
-          <details><summary>Preciso saber programar?</summary><div>Não. Pelo painel você gera a cobrança, copia o link e manda para o cliente. A API é opcional, para quem quer automatizar.</div></details>
-          <details><summary>Quanto tempo o cliente tem para pagar?</summary><div>Por padrão, 30 minutos. Pela API você escolhe de 5 minutos a 24 horas com <span class="mono">expires_in</span>. Depois disso a cobrança expira e o QR deixa de valer.</div></details>
-          <details><summary>Qual o valor mínimo e máximo por cobrança?</summary><div>De R$ 1,00 a R$ 50.000,00 por cobrança.</div></details>
-          <details><summary>Dá para devolver um pagamento?</summary><div>Sim, pela API (<span class="mono">POST /v1/charges/{id}/refund</span>) ou pela sua conta Mercado Pago. A devolução sai da sua conta e a cobrança vira <span class="mono">refunded</span>.</div></details>
-          <details><summary>Posso testar antes de vender?</summary><div>Sim: conecte a conta, crie uma cobrança de R$ 1,00, pague pelo seu banco e veja o webhook chegar. A documentação tem um passo a passo de testes.</div></details>
-          <details><summary>Minha conta precisa de aprovação?</summary><div>Sim. Depois do cadastro (com CPF ou CNPJ válido), nossa equipe analisa e libera a conta. Aprovada, você entra no painel e conecta o Mercado Pago.</div></details>
-        </div>
-      </div>
-    </section>
-
-    <!-- ================= CTA ================= -->
-    <section class="final">
-      <div class="wrap reveal">
-        <h2>Comece a receber hoje</h2>
-        <p>Cadastro em 2 minutos. Sua conta é analisada e liberada pela nossa equipe; depois é só conectar o Mercado Pago e as credenciais da API são geradas para você automaticamente.</p>
-        <div class="cta"><a href="/cadastro" class="btn btn-primary btn-lg">Criar conta grátis</a><a href="/docs" class="btn btn-lg">Explorar a API</a></div>
-        <p class="fine">2% por PIX pago · mínimo R$ 0,30 · sem mensalidade</p>
+        <details class="faq glass reveal"><summary>É seguro? Precisa da minha senha?</summary><p>Não. Só precisamos do ID público do seu perfil. Nunca pedimos login, senha ou acesso à conta.</p></details>
+        <details class="faq glass reveal"><summary>Quanto tempo demora para os likes chegarem?</summary><p>Assim que o PIX é confirmado, o envio começa em até 1 minuto. Abra o perfil no jogo e veja o contador subir.</p></details>
+        <details class="faq glass reveal"><summary>Posso receber mais de 2.000 likes no mesmo dia?</summary><p>Não. O jogo limita cada ID a 2.000 likes por dia. Se o ID já recebeu likes hoje, o envio fica para o dia seguinte, automaticamente.</p></details>
+        <details class="faq glass reveal"><summary>Como funcionam os planos por dias?</summary><p>Você paga uma vez e recebe 2.000 likes por dia durante o período. Os envios são agendados sozinhos, sempre no horário do primeiro envio.</p></details>
+        <details class="faq glass reveal"><summary>Paguei e não recebi. E agora?</summary><p>Abra a página do pedido pelo código e veja o status. Se algo falhou, o sistema tenta de novo sozinho. Se precisar, chame o suporte pelo WhatsApp.</p></details>
       </div>
     </section>
   </main>
 
-  <footer class="site">
+  <footer class="footer">
     <div class="wrap">
-      <div class="cols">
-        <div><a href="/" class="brand" id="brandF" style="color:var(--text)">Zyropay</a><p class="about">A camada de produto para o PIX do seu Mercado Pago: API, checkout, webhooks e painel. O dinheiro cai direto na sua conta.</p></div>
-        <div><h4>Produto</h4><ul><li><a href="#recursos">Recursos</a></li><li><a href="#como">Como funciona</a></li><li><a href="#precos">Preços</a></li><li><a href="#seguranca">Segurança</a></li></ul></div>
-        <div><h4>Desenvolvedores</h4><ul><li><a href="/docs">Documentação</a></li><li><a href="/docs#autenticacao">Autenticação</a></li><li><a href="/docs#criar-cobranca">Criar cobrança</a></li><li><a href="/docs#webhooks">Webhooks</a></li></ul></div>
-        <div><h4>Conta</h4><ul><li><a href="/cadastro">Criar conta</a></li><li><a href="/entrar">Entrar</a></li><li><a href="#faq">Perguntas frequentes</a></li></ul></div>
-      </div>
-      <div class="bottom"><span>© <span id="year"></span> Zyropay. Todos os direitos reservados.</span><span>Pagamentos PIX processados via Mercado Pago</span></div>
+      <div class="logo"><span>LIKE<b>2K</b></span></div>
+      <p class="muted">Serviço independente, sem vínculo com a Garena ou com o Free Fire. Free Fire é marca registrada de seus respectivos donos.</p>
+      <a id="whatsLink" class="btn btn-sm" hidden target="_blank" rel="noopener">Suporte no WhatsApp</a>
     </div>
   </footer>
 
-  <script src="/js/site.js" defer></script>
-  <script type="module">
-    import { LOGO, brl, toCents, moneyMask, api } from '/js/common.js';
-    document.getElementById('brand').innerHTML = `${LOGO}Zyropay`;
-    document.getElementById('brandF').innerHTML = `${LOGO}Zyropay`;
-    document.getElementById('year').textContent = new Date().getFullYear();
+  <a id="whatsFab" class="whats-fab" hidden target="_blank" rel="noopener" aria-label="WhatsApp">
+    <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><path d="M20.5 3.5A11.9 11.9 0 0 0 12 0C5.4 0 .1 5.3.1 11.9c0 2.1.5 4.1 1.6 5.9L0 24l6.4-1.7a11.9 11.9 0 0 0 5.6 1.4c6.6 0 11.9-5.3 11.9-11.9 0-3.2-1.2-6.2-3.4-8.3zM12 21.8c-1.8 0-3.5-.5-5-1.4l-.4-.2-3.8 1 1-3.7-.2-.4A9.8 9.8 0 0 1 2.1 12C2.1 6.5 6.5 2 12 2c2.6 0 5.1 1 7 2.9A9.8 9.8 0 0 1 21.9 12c0 5.4-4.5 9.8-9.9 9.8zm5.4-7.3c-.3-.1-1.8-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.1-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6l.4-.5.3-.5c.1-.2 0-.4 0-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1c.1.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.8-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4z"/></svg>
+  </a>
 
-    // calculadora: 2% com mínimo de R$ 0,30
-    const calcIn = document.getElementById('calcIn');
-    moneyMask(calcIn);
-    const calc = () => {
-      const v = toCents(calcIn.value) || 0;
-      const fee = v ? Math.min(v, Math.max(30, Math.round(v * 0.02))) : 0;
-      document.getElementById('cGross').textContent = brl(v);
-      document.getElementById('cFee').textContent = `− ${brl(fee)}`;
-      document.getElementById('cNet').textContent = brl(v - fee);
-    };
-    calcIn.addEventListener('input', calc);
-    calc();
-
-    // gráfico decorativo do painel
-    const heights = [38, 52, 44, 61, 48, 70, 56, 66, 82, 60, 74, 90, 68, 100];
-    document.getElementById('bars').innerHTML = heights.map((h) => `<i style="height:${h}%"></i>`).join('');
-
-    // QR decorativo (padrão fixo com os três marcadores)
-    const cv = document.getElementById('demoQr'), g = cv.getContext('2d');
-    let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    g.fillStyle = '#111';
-    for (let y = 0; y < 29; y++) for (let x = 0; x < 29; x++) if (rnd() > 0.52) g.fillRect(x, y, 1, 1);
-    for (const [x, y] of [[0, 0], [22, 0], [0, 22]]) {
-      g.fillStyle = '#fff'; g.fillRect(x, y, 7, 7);
-      g.fillStyle = '#111'; g.fillRect(x, y, 7, 7); g.fillStyle = '#fff'; g.fillRect(x + 1, y + 1, 5, 5); g.fillStyle = '#111'; g.fillRect(x + 2, y + 2, 3, 3);
-    }
-
-    // ciclo da demonstração: aguardando -> pago
-    const demo = document.getElementById('demo'), st = document.getElementById('demoStatus'), timer = document.getElementById('demoTimer');
-    let secs = 1781;
-    setInterval(() => { secs = secs > 0 ? secs - 1 : 1781; timer.textContent = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`; }, 1000);
-    const cycle = () => {
-      demo.classList.remove('is-paid'); st.className = 'status pending'; st.textContent = 'Aguardando';
-      setTimeout(() => { demo.classList.add('is-paid'); st.className = 'status paid'; st.textContent = 'Pago'; }, 3200);
-    };
-    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) { cycle(); setInterval(cycle, 7000); }
-
-    api('/api/me').then(() => { const a = document.getElementById('navLogin'); a.textContent = 'Painel'; a.href = '/app'; }).catch(() => {});
-  </script>
+  <script type="module" src="/js/site.js"></script>
 </body>
 </html>

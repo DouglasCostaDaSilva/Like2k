@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Painel — Like2k</title>
+  <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#07070c" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/site.css" />
+  <link rel="stylesheet" href="/css/admin.css" />
+</head>
+<body class="admin">
+  <div class="bg-glow" aria-hidden="true"></div>
+
+  <section id="login" class="login" hidden>
+    <form class="card glass" id="formLogin">
+      <a href="/" class="logo"><svg viewBox="0 0 64 64"><path d="M32 50s-16-9.6-16-21.2C16 22.4 20.6 18 26 18c3 0 5 1.5 6 3 1-1.5 3-3 6-3 5.4 0 10 4.4 10 10.8C48 40.4 32 50 32 50z" fill="#ff6a3d"/></svg><span>LIKE<b>2K</b></span></a>
+      <h2>Painel</h2>
+      <label class="field"><span>Usuário</span><input id="loginUser" autocomplete="username" required /></label>
+      <label class="field"><span>Senha</span><input id="loginPass" type="password" autocomplete="current-password" required /></label>
+      <p class="error" id="loginError" hidden></p>
+      <button class="btn btn-primary btn-block" type="submit">Entrar</button>
+    </form>
+  </section>
+
+  <div id="app" class="app" hidden>
+    <aside class="side glass">
+      <a href="/" class="logo"><svg viewBox="0 0 64 64"><path d="M32 50s-16-9.6-16-21.2C16 22.4 20.6 18 26 18c3 0 5 1.5 6 3 1-1.5 3-3 6-3 5.4 0 10 4.4 10 10.8C48 40.4 32 50 32 50z" fill="#ff6a3d"/></svg><span>LIKE<b>2K</b></span></a>
+      <nav class="tabs">
+        <button data-tab="overview" class="active">Visão geral</button>
+        <button data-tab="orders">Pedidos</button>
+        <button data-tab="deliveries">Envios</button>
+        <button data-tab="send">Enviar likes</button>
+        <button data-tab="settings">Configurações</button>
+      </nav>
+      <div class="side-foot">
+        <span class="muted small" id="modeTag"></span>
+        <button class="btn btn-sm" id="btnLogout">Sair</button>
+      </div>
+    </aside>
+
+    <main class="content">
+      <!-- Visão geral -->
+      <section class="tab" data-tab="overview">
+        <div class="head"><h2>Visão geral</h2><button class="btn btn-sm" id="btnRefresh">Atualizar</button></div>
+        <div class="alerts" id="alerts"></div>
+        <div class="tiles" id="tiles"></div>
+        <div class="grid-2">
+          <div class="card glass">
+            <h3>Vendas · últimos 14 dias</h3>
+            <div class="bars" id="bars"></div>
+          </div>
+          <div class="card glass">
+            <h3>Saldo da API de likes</h3>
+            <div id="balance" class="kv"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pedidos -->
+      <section class="tab" data-tab="orders" hidden>
+        <div class="head"><h2>Pedidos</h2></div>
+        <div class="filters">
+          <select id="orderStatus">
+            <option value="">Todos</option>
+            <option value="pending">Aguardando PIX</option>
+            <option value="paid">Pago</option>
+            <option value="delivering">Enviando</option>
+            <option value="completed">Concluído</option>
+            <option value="failed">Falhou</option>
+            <option value="expired">Expirado</option>
+            <option value="cancelled">Cancelado</option>
+          </select>
+          <input id="orderSearch" placeholder="Buscar por código, ID, nick ou contato" />
+        </div>
+        <div class="table-wrap glass"><table id="ordersTable"><thead><tr><th>Código</th><th>Jogador</th><th>Plano</th><th>Valor</th><th>Status</th><th>Envios</th><th>Criado</th><th></th></tr></thead><tbody></tbody></table></div>
+      </section>
+
+      <!-- Envios -->
+      <section class="tab" data-tab="deliveries" hidden>
+        <div class="head"><h2>Envios</h2></div>
+        <div class="filters">
+          <select id="deliveryStatus">
+            <option value="">Todos</option>
+            <option value="queued">Na fila</option>
+            <option value="sent">Enviados</option>
+            <option value="failed">Falharam</option>
+            <option value="cancelled">Cancelados</option>
+          </select>
+        </div>
+        <div class="table-wrap glass"><table id="deliveriesTable"><thead><tr><th>#</th><th>ID / nick</th><th>Pedido</th><th>Dia</th><th>Likes</th><th>Status</th><th>Quando</th><th>Obs.</th><th></th></tr></thead><tbody></tbody></table></div>
+      </section>
+
+      <!-- Enviar -->
+      <section class="tab" data-tab="send" hidden>
+        <div class="head"><h2>Enviar likes</h2></div>
+        <div class="card glass narrow">
+          <p class="muted">Envio manual, sem pedido (bônus, reposição, teste). Respeita o limite de 2.000 likes por dia em cada ID.</p>
+          <form id="formSend">
+            <label class="field"><span>ID do jogador</span><div class="row"><input id="sendUid" inputmode="numeric" maxlength="12" required /><button class="btn" type="button" id="btnSendCheck">Conferir</button></div></label>
+            <div class="player" id="sendPlayer" hidden></div>
+            <label class="field"><span>Quantidade (1 a 2.000)</span><input id="sendAmount" type="number" min="1" max="2000" value="2000" required /></label>
+            <button class="btn btn-primary" type="submit" id="btnSend">Enviar agora</button>
+          </form>
+          <div id="sendResult"></div>
+        </div>
+      </section>
+
+      <!-- Configurações -->
+      <section class="tab" data-tab="settings" hidden>
+        <div class="head"><h2>Configurações</h2></div>
+        <form id="formSettings" class="card glass">
+          <div class="grid-2">
+            <label class="field"><span>Nome do site</span><input id="sSiteName" maxlength="40" required /></label>
+            <label class="field"><span>WhatsApp do suporte (só números, com DDD)</span><input id="sWhatsapp" inputmode="numeric" maxlength="20" placeholder="11999999999" /></label>
+          </div>
+          <label class="field"><span>Frase de destaque (abaixo do título)</span><input id="sTagline" maxlength="120" /></label>
+          <label class="field"><span>Aviso no topo do site (vazio = sem aviso)</span><input id="sNotice" maxlength="200" placeholder="Ex.: Envios em manutenção até 18h." /></label>
+          <div class="head"><h3>Planos</h3><div class="row"><button class="btn btn-sm" type="button" id="btnAddPlan">+ Plano</button><button class="btn btn-sm" type="button" id="btnResetPlans">Restaurar padrão</button></div></div>
+          <p class="muted small">Cada dia do plano = 2.000 likes. Preço em reais.</p>
+          <div class="table-wrap"><table id="plansTable"><thead><tr><th>Ativo</th><th>Código</th><th>Nome</th><th>Dias</th><th>Preço (R$)</th><th>Selo</th><th>Descrição</th><th></th></tr></thead><tbody></tbody></table></div>
+          <p class="error" id="settingsError" hidden></p>
+          <button class="btn btn-primary" type="submit">Salvar</button>
+        </form>
+        <div class="card glass" style="margin-top:18px">
+          <h3>Chaves e integrações</h3>
+          <p class="muted small">Por segurança, a API Key dos likes, o Access Token do Mercado Pago e a senha do admin ficam no arquivo <code>.env</code> do servidor (veja o README).</p>
+          <div class="kv" id="integrations"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="/js/admin.js"></script>
+</body>
+</html>
